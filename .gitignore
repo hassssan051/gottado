@@ -1,0 +1,9 @@
+node_modules
+dist
+*.tar.gz
+
+tmp
+*.png
+check.cjs
+
+build.log
