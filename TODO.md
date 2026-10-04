@@ -20,7 +20,7 @@
 
 ## Implemented in this update
 
-- [x] Alt+Up/Down reorders sibling branches, including descendants, without changing depth; first/last siblings stop at their boundaries.
+- [x] Alt+Up/Down moves branches freely into and out of sublists, keeping descendants attached and following focus across scoped views.
 - [x] View-only mode prevents text editing, completion, deletion, insertion, indentation, and reorder; permits folding, navigation, copy, and sharing.
 - [x] View-only uses fixed reading width; theme, font, and size remain available. Mode toggle is an icon button.
 - [x] Wrapping new-note textarea; Up/Down navigate its visual lines and move to the last/first visible note at the edges. Notes navigate back to the draft at list boundaries.

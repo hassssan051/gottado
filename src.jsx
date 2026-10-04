@@ -188,7 +188,7 @@ if(e.nativeEvent.isComposing)return;
 const mod=e.ctrlKey||e.metaKey;
 if(e.altKey&&!e.shiftKey&&!mod&&e.key==='Enter'){e.preventDefault();openSublist(task.id);return}
 if(!prefs.viewOnly&&!mod&&!e.altKey&&!e.shiftKey&&e.key==='Delete'){e.preventDefault();setDeleteId(task.id);return}
-if(!prefs.viewOnly&&e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const next=moveBranch(tasks,task.id,e.key==='ArrowUp'?-1:1);setTasks(next);focusTask(task.id);if(next===tasks)setNotice('Already at the edge of this sublist.');return}
+if(!prefs.viewOnly&&e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const moved=moveBranch(tasks,task.id,e.key==='ArrowUp'?-1:1);if(moved===tasks){setNotice('Already at the edge of the list.');return}const next=revealTask(moved,task.id);tasksRef.current=next;setTasks(next);setNotice('');if(scopeId){const at=next.findIndex(t=>t.id===task.id),scopeAt=next.findIndex(t=>t.id===scopeId);if(scopeAt<0||at<=scopeAt||at>=endOfBranch(next,scopeAt)){const parent=parentIndex(next,at);navigate(parent>=0?next[parent].id:null)}}focusTask(task.id);return}
 const index=visible.findIndex(t=>t.id===task.id);
 if(e.key==='Escape'){e.preventDefault();e.target.blur();input.current?.focus();return}
 if(!prefs.viewOnly&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(prefs.hierarchy)insert(task.id,e.ctrlKey||e.metaKey);else e.target.blur();return}
@@ -260,7 +260,7 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 ['Previous / next task at visual text edges',['↑ / ↓']],
 ['Open focused note’s sublist',['Alt','Enter']],
 ['Back to containing list',['Alt','Backspace']],
-['Move note within its sublist',['Alt','↑ / ↓']],
+['Move note through all sublists',['Alt','↑ / ↓']],
 ['Toggle completion',['Ctrl / ⌘','Space']],
 ['Finish editing / leave the list',['Esc']],
 ]} note="Only notes with children can be opened. Alt + Enter focuses the first child; Alt + Backspace returns and focuses the note you came from. Both work in view-only mode."/>

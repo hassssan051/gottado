@@ -34,14 +34,29 @@ return tasks.map(t=>parents.has(t.id)?{...t,collapsed:false}:t);
 }
 export function setAllCollapsed(tasks,collapsed){return tasks.map((t,i)=>({...t,collapsed:collapsed&&i+1<tasks.length&&depth(tasks[i+1])>depth(t)}))}
 
-// Move the entire branch between siblings; boundaries never change its parent.
+// Move a branch through outline rows, changing its level at sublist boundaries.
 export function moveBranch(tasks,id,direction){
 const i=tasks.findIndex(t=>t.id===id);if(i<0)return tasks;
 const end=endOfBranch(tasks,i),level=depth(tasks[i]);
-if(direction<0){let previous=i-1;while(previous>=0&&depth(tasks[previous])>level)previous--;
-if(previous<0||depth(tasks[previous])!==level)return tasks;
-return [...tasks.slice(0,previous),...tasks.slice(i,end),...tasks.slice(previous,i),...tasks.slice(end)];}
-if(end>=tasks.length||depth(tasks[end])!==level)return tasks;
-const nextEnd=endOfBranch(tasks,end);
-return [...tasks.slice(0,i),...tasks.slice(end,nextEnd),...tasks.slice(i,end),...tasks.slice(nextEnd)];
+let at,newLevel;
+if(direction<0){
+if(i===0)return tasks;
+const previous=i-1;
+// The first child moves before its parent; otherwise enter the preceding row's level.
+at=previous;newLevel=depth(tasks[previous]);
+}else{
+if(end===tasks.length||depth(tasks[end])<level){
+if(level===0)return tasks;
+// The last child leaves its parent, one level at a time.
+at=end;newLevel=level-1;
+}else{
+at=end+1;
+// Enter a neighboring sublist before its first child.
+newLevel=depth(tasks[end])+(endOfBranch(tasks,end)>end+1?1:0);
+}
+}
+const branch=tasks.slice(i,end).map(t=>({...t,depth:depth(t)+newLevel-level}));
+const rest=[...tasks.slice(0,i),...tasks.slice(end)];
+const insertion=at>i?at-(end-i):at;
+return [...rest.slice(0,insertion),...branch,...rest.slice(insertion)];
 }

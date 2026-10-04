@@ -10,13 +10,17 @@ const {toMarkdown}=await import(moduleURL('./markdown.js'));
 const {searchCommands}=await import(moduleURL('./themes.js'));
 const task=(id,depth=0)=>({id,text:id,depth,done:false});
 const tasks=[task('parent'),task('a',1),task('grandchild',2),task('b',1),task('other')];
-assert.deepEqual(moveBranch(tasks,'a',1).map(t=>t.id),['parent','b','a','grandchild','other']);
-assert.deepEqual(moveBranch(tasks,'b',-1).map(t=>t.id),['parent','b','a','grandchild','other']);
-assert.equal(moveBranch(tasks,'a',-1),tasks,'First child cannot escape its parent');
-assert.equal(moveBranch(tasks,'b',1),tasks,'Last child cannot escape its parent');
+const shape=ts=>ts.map(t=>[t.id,t.depth]);
+assert.deepEqual(shape(moveBranch(tasks,'a',1)),[['parent',0],['b',1],['a',1],['grandchild',2],['other',0]]);
+assert.deepEqual(shape(moveBranch(tasks,'b',-1)),[['parent',0],['a',1],['b',2],['grandchild',2],['other',0]],'Up enters the preceding sublist');
+assert.deepEqual(shape(moveBranch(tasks,'a',-1)),[['a',0],['grandchild',1],['parent',0],['b',1],['other',0]],'First child exits before its parent with descendants');
+assert.deepEqual(shape(moveBranch(tasks,'b',1)),[['parent',0],['a',1],['grandchild',2],['b',0],['other',0]],'Last child exits after its parent');
 assert.equal(moveBranch(tasks,'parent',-1),tasks);
 assert.equal(moveBranch(tasks,'other',1),tasks);
-assert.deepEqual(moveBranch(tasks,'parent',1).map(t=>t.id),['other','parent','a','grandchild','b']);
+assert.deepEqual(shape(moveBranch([task('before'),...tasks],'before',1)),[['parent',0],['before',1],['a',1],['grandchild',2],['b',1],['other',0]],'Down enters a neighboring sublist');
+assert.deepEqual(shape(moveBranch([task('parent'),task('a',1),task('child',2)],'a',1)),[['parent',0],['a',0],['child',1]],'End of outline permits outdenting');
+const validate=ts=>{assert.equal(ts[0].depth,0);for(let i=1;i<ts.length;i++)assert.ok(ts[i].depth<=ts[i-1].depth+1)};
+for(const id of tasks.map(t=>t.id))for(const direction of [-1,1]){let moved=tasks;for(let i=0;i<30;i++){moved=moveBranch(moved,id,direction);validate(moved);assert.equal(new Set(moved.map(t=>t.id)).size,tasks.length)}}
 const deep=Array.from({length:30},(_,i)=>task('n'+i,i));
 const inserted=insertTask(deep,'n29',true,task('new'));
 assert.equal(inserted.at(-1).depth,30);
@@ -28,4 +32,4 @@ assert.equal(parsePaste(deep.map(t=>'  '.repeat(t.depth)+t.text).join('\n')).ent
 assert.ok(toMarkdown(deep).split('\n').at(-1).startsWith('  '.repeat(29)));
 assert.deepEqual(visibleTasks(tasks.map(t=>t.id==='a'?{...t,collapsed:true}:t)).map(t=>t.id),['parent','a','b','other']);
 assert.equal(searchCommands([{id:'action',label:'Add child to selected task',group:'Actions',disabled:true},{id:'note',label:'Child A',group:'Notes'}],'Child A')[0].id,'note');
-console.log('Outline checks passed: branch boundaries, descendants, unlimited nesting, undo, paste, export, visibility, and note search.');
+console.log('Outline checks passed: movement across sublists, descendants, unlimited nesting, undo, paste, export, visibility, and note search.');
