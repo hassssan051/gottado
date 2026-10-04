@@ -51,3 +51,6 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 - [x] Navigating or tabbing to a note places the caret at the end of its text, including search results and sublist navigation.
 
 - [x] All modals close on outside clicks and restore the last focused note at its text end, or a neighboring note if it was deleted.
+
+- [x] Larger search icon in the action modal; navigating theme options previews them immediately, and closing without selecting restores the saved theme.
+- [x] Parent deletion defaults to including all children; an unchecked option preserves them. Undo restores the entire deleted branch with its nesting and completion state.

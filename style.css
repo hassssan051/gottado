@@ -98,3 +98,7 @@ main{width:100%;margin:0;padding:82px 48px 80px}
 .title-row h1{flex:1;min-width:0;margin:0;overflow-wrap:anywhere}
 .share-button{flex:none;width:40px;height:40px;color:var(--muted)}
 .share-button svg{width:22px;height:22px}
+
+.command-search-icon{display:flex;align-items:center;justify-content:center;width:36px;height:36px;flex:none;color:var(--accent)}
+.delete-children-option{display:flex;align-items:center;gap:10px;margin:0 0 24px;font-size:14px;cursor:pointer}
+.delete-children-option input{width:18px;height:18px;accent-color:var(--accent)}
