@@ -1,7 +1,7 @@
 {
   "name": "gottado",
   "version": "1.0.0",
-  "description": "Fight procrastination.",
+  "description": "Fight procrastination by listing your troubles away.",
   "main": "index.js",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

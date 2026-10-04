@@ -1,6 +1,6 @@
 # Gottado
 
-Fight procrastination.
+Fight procrastination by listing your troubles away.
 
 Originally exported from https://gottodo.zaidio.chatgpt.site/
 
