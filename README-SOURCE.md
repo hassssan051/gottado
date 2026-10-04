@@ -1,6 +1,6 @@
 # Gottado
 
-To fight against procrastination.
+Fight procrastination.
 
 Originally exported from https://gottodo.zaidio.chatgpt.site/
 
@@ -31,6 +31,6 @@ Production build: `npm run build`. Preview: `npm run preview`.
 - package.json and package-lock.json: dependency declarations and exact dependency resolution.
 - .openai/hosting.json: Sites hosting configuration.
 
-Gottado is a local-first task and note app built to fight against procrastination: capture the next small task, organize it only as much as needed, and get moving. Tasks and preferences are saved in browser localStorage. User task data is not part of this source export. Installed dependencies and generated build output can be reproduced with the commands above. Dependency license metadata is available through the installed packages; the source package includes no hosting credentials or browser session files.
+Tasks and preferences are saved in browser localStorage. User task data is not part of this source export. Installed dependencies and generated build output can be reproduced with the commands above. Dependency license metadata is available through the installed packages; the source package includes no hosting credentials or browser session files.
 
 SHA256SUMS lists hashes of every included source file.

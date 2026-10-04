@@ -56,4 +56,4 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 - [x] Parent deletion preserves children by default; checking “Delete all children too” deletes the whole branch. Undo restores the entire deleted branch with its nesting and completion state.
 
 - [x] Feedback header icon and action-search entry open the Quackback portal in a new tab. Local API management helper reads ignored credentials without exposing them to the browser.
-- [x] Use the Gottado tagline, “To fight against procrastination,” in the browser metadata, empty state, and project documentation.
+- [x] Use the Gottado tagline, “Fight procrastination,” in the browser metadata, empty state, and project documentation.
