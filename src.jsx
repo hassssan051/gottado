@@ -112,12 +112,12 @@ useEffect(()=>{const media=matchMedia('(prefers-color-scheme: dark)');const chan
 const activeTheme=resolveTheme(previewTheme??prefs.theme,systemDark);const dark=activeTheme.dark;
 useEffect(()=>{if(confirmRemove){dialog.current?.showModal();bulkConfirm.current?.focus()}else dialog.current?.close()},[confirmRemove]);
 useEffect(()=>{const key=e=>{if(e.defaultPrevented||e.isComposing||!e.altKey||e.ctrlKey||e.metaKey||document.querySelector('dialog[open]'))return;const command=shortcutCommands.current[(e.shiftKey?'shift+':'')+e.key.toLowerCase()];if(!command||command.disabled)return;e.preventDefault();command.run()};window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key)},[]);
-const [deleteId,setDeleteId]=useState(null);const [deleteChildren,setDeleteChildren]=useState(true);const deleteDialog=useRef(null);const deleteConfirm=useRef(null);
+const [deleteId,setDeleteId]=useState(null);const [deleteChildren,setDeleteChildren]=useState(false);const deleteDialog=useRef(null);const deleteConfirm=useRef(null);
 const [flashId,setFlashId]=useState(null);
 const routeId=()=>{try{return location.hash.startsWith('#/shared/list/')?decodeURIComponent(location.hash.slice(14)):location.hash.startsWith('#/list/')?decodeURIComponent(location.hash.slice(7)):null}catch{return null}};
 const [scopeId,setScopeId]=useState(routeId);
 useEffect(()=>{const change=()=>setScopeId(routeId());window.addEventListener('hashchange',change);return ()=>window.removeEventListener('hashchange',change)},[]);
-useEffect(()=>{if(deleteId){setDeleteChildren(true);deleteDialog.current?.showModal();deleteConfirm.current?.focus()}else deleteDialog.current?.close()},[deleteId]);
+useEffect(()=>{if(deleteId){setDeleteChildren(false);deleteDialog.current?.showModal();deleteConfirm.current?.focus()}else deleteDialog.current?.close()},[deleteId]);
 const navigate=(id,replace=false)=>{if(id){const i=tasksRef.current.findIndex(t=>t.id===id);if(i<0||endOfBranch(tasksRef.current,i)<=i+1)return}const hash=(sharedSnapshot?'/shared':'')+(id?'/list/'+encodeURIComponent(id):'/');if(replace)history.replaceState(null,'',location.pathname+location.search+'#'+hash);else location.hash=hash;setScopeId(id)};
 const [draft,setDraft]=useState('');const input=useRef(null);
 useEffect(()=>{if(sharedSnapshot){try{sessionStorage.setItem('just-todo-shared-snapshot',JSON.stringify(tasks))}catch{}return}try{localStorage.setItem('just-todo-tasks',JSON.stringify(tasks))}catch{}},[tasks,sharedSnapshot]);
@@ -306,7 +306,7 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 ['Remove all tasks',['Alt','Shift','D']],
 ['Confirm deletion',['Enter']],
 ['Undo the latest available deletion',['Ctrl / ⌘','Z']],
-]} note="Click a note’s trash icon, press Delete while a note is focused, or find “Delete selected note” in Find notes and actions, then Enter to confirm. Clear completed and Remove all also ask for confirmation and cannot be undone. Individual note deletions can be undone during this session. Multiple deletions undo newest first. If none is available, Ctrl/⌘ + Z keeps its normal text-editing behavior. Parent deletion includes all children by default. Uncheck “Delete all children too” to keep them. Undo restores the deleted note or whole branch."/>
+]} note="Click a note’s trash icon, press Delete while a note is focused, or find “Delete selected note” in Find notes and actions, then Enter to confirm. Clear completed and Remove all also ask for confirmation and cannot be undone. Individual note deletions can be undone during this session. Multiple deletions undo newest first. If none is available, Ctrl/⌘ + Z keeps its normal text-editing behavior. Parent deletion keeps children by default. Check “Delete all children too” to delete the whole branch. Undo restores the deleted note or whole branch."/>
 <ShortcutGroup title="Settings menus" rows={[
 ['Move between options',['↑ / ↓']],
 ['First / last option',['Home / End']],
