@@ -25,7 +25,7 @@
 - [x] View-only uses fixed reading width; theme, font, and size remain available. Mode toggle is an icon button.
 - [x] Wrapping new-note textarea; Up/Down navigate its visual lines and move to the last/first visible note at the edges. Notes navigate back to the draft at list boundaries.
 - [x] Theme-colored editing outline and short note-copy outline flash.
-- [x] Minimal plus controls before the first note and between visible notes, revealed on hover or focus.
+- [x] Minimal plus controls between visible notes, revealed on hover or focus. The new-note input handles insertion before the first note.
 - [x] Ctrl/⌘+C copies the whole focused note when no text is selected; selected text retains ordinary clipboard behavior.
 - [x] Delete and the action palette open note-deletion confirmation; Enter confirms immediately. Undo remains available for the session, even after its toast disappears.
 - [x] Combined action/note search, visible search icon/button, and delayed, shorter tooltips. Exact note matches rank above loosely matching actions; selecting a result navigates to its parent list.
