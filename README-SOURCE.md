@@ -1,6 +1,6 @@
-# gottodo source export
+# Gottado
 
-Complete application source snapshot for https://gottodo.zaidio.chatgpt.site/
+Originally exported from https://gottodo.zaidio.chatgpt.site/
 
 Git commit: 37bfadce205bdc656518cb4ba76abeb716b8c8ca
 Export date: 2026-10-02

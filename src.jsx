@@ -11,6 +11,7 @@ import {parsePaste} from './paste.js';
 import {deletionRecord,restoreDeleted} from './undo.js';
 import {depth,indentBranch,removePreservingChildren,insertTask,endOfBranch,visibleTasks,parentIndex,revealTask,setAllCollapsed,moveBranch} from './outline.js';
 
+// Retain legacy storage keys so renaming Gottado preserves existing notes and preferences.
 const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}};
 // Measure the caret's visual line using the textarea's exact wrapping styles.
 function atTextEdge(el,key){
@@ -227,7 +228,7 @@ const commands=[
 shortcutCommands.current={'shift+c':commands.find(c=>c.id==='clear'),'shift+d':commands.find(c=>c.id==='remove'),'shift+arrowleft':commands.find(c=>c.id==='collapse'),'shift+arrowright':commands.find(c=>c.id==='expand'),enter:{run:()=>openSublist(selectedTask.current)},backspace:commands.find(c=>c.id==='back')};
 return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOut'}}><div className={"app"+(prefs.viewOnly?" view-only":"")} onKeyDown={outlineKey} onFocusCapture={e=>{const id=e.target.closest('[data-task-id]')?.dataset.taskId;if(id)selectedTask.current=id}} style={{'--list-font':`"${prefs.font}"`,'--list-size':{small:'18px',medium:'22px',large:'28px'}[prefs.size]}}>
 {!prefs.hidden&&<header className="toolbar"><div className="bar">
-<a className="brand" href={sharedSnapshot?'#/shared':'#/'} onClick={e=>{e.preventDefault();navigate(null)}} aria-label="lotstodo home"><span className="brand-icon"><Icon name="check"/></span><span>lotstodo</span></a>
+<a className="brand" href={sharedSnapshot?'#/shared':'#/'} onClick={e=>{e.preventDefault();navigate(null)}} aria-label="Gottado home"><span className="brand-icon"><Icon name="check"/></span><span>gottado</span></a>
 <div className="settings"><div className="header-preferences"><SelectBox label="Font" value={prefs.font} onChange={v=>update('font',v)} preview options={['Excalifont','Space Mono','Poppins'].map(v=>({value:v,label:v}))}/><span className="divider"/><SelectBox label="Size" value={prefs.size} onChange={v=>update('size',v)} options={[{value:'small',label:'Small'},{value:'medium',label:'Medium'},{value:'large',label:'Large'}]}/><span className="divider"/><SelectBox label="Theme" value={prefs.theme} onChange={v=>update('theme',v)} options={[{value:'system',label:'System'},...THEMES.map(t=>({value:t.id,label:t.label}))]}/></div><div className="toolbar-actions"><ToolButton className="icon-button" aria-label={prefs.viewOnly?'Edit list':'View only'} aria-pressed={prefs.viewOnly} tip={prefs.viewOnly?'Edit list':'View only'} icon={prefs.viewOnly?'edit':'eye'} onClick={()=>update('viewOnly',!prefs.viewOnly)}/><ToolButton className="icon-button" aria-label="Search notes and actions" tip="Find notes & actions" shortcut="Ctrl/⌘ + Shift + P" icon="search" onClick={()=>setPaletteOpen(true)}/><ToolButton ref={copyButton} className="icon-button" aria-label="Copy Markdown" tip={copied?'Copied':'Copy Markdown'} icon={copied?'check':'copy'} disabled={!tasks.length} onClick={copyMarkdown}/><ToolButton ref={helpButton} className="icon-button" aria-label="Keyboard shortcuts" tip="Keyboard shortcuts" shortcut="Ctrl/⌘ + /" icon="info" onClick={()=>setHelpOpen(true)}/><ToolButton className="icon-button" aria-label="Hide settings bar" tip="Hide settings bar" icon="hide" onClick={()=>update('hidden',true)}/></div></div>
 </div></header>}
 {prefs.hidden&&<ToolButton className="show-bar icon-button" aria-label="Show settings bar" tip="Show settings bar" icon="show" onClick={()=>update('hidden',false)}/>}
@@ -243,7 +244,7 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 
 </dialog>
 <dialog ref={helpDialog} className="help-dialog confirm-dialog" aria-labelledby="help-title" onCancel={()=>setHelpOpen(false)} onClose={()=>{setHelpOpen(false);helpButton.current?.focus()}}>
-<div className="help-header"><div><span className="help-eyebrow">LOTSTODO GUIDE</span><h2 id="help-title">Keyboard shortcuts</h2></div><button autoFocus className="action-button" onClick={()=>setHelpOpen(false)}>Close</button></div>
+<div className="help-header"><div><span className="help-eyebrow">GOTTADO GUIDE</span><h2 id="help-title">Keyboard shortcuts</h2></div><button autoFocus className="action-button" onClick={()=>setHelpOpen(false)}>Close</button></div>
 <p className="help-intro">Use Ctrl on Windows/Linux or ⌘ on Mac. Note shortcuts work while editing a note. List shortcuts work anywhere outside a dialog. Lists can be nested to any depth.</p>
 <div className="shortcut-grid">
 <ShortcutGroup title="Commands & help" rows={[
