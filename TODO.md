@@ -43,3 +43,5 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 - [x] Remove inline deletion, clear-completed, remove-all, collapse-all, and expand-all buttons; retain their palette actions and document shortcuts in both modals. Bulk deletion shortcuts open confirmation with focus on the confirm button.
 
 - [x] Only notes with children expose sublist navigation; leaf routes redirect to their containing list. A doorway-arrow icon opens sublists, Alt+Enter enters them, and Alt+Backspace returns with focus restored. Both shortcuts are documented in the action palette and guide.
+
+- [x] Notes added or pasted through “What needs doing?” appear at the top of the current list or sublist, preserving pasted note order.

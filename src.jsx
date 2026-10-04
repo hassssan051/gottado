@@ -122,7 +122,7 @@ useEffect(()=>{const root=document.documentElement;root.dataset.theme=activeThem
 useEffect(()=>{const key=e=>{if(e.isComposing)return;const mod=e.ctrlKey||e.metaKey;if(mod&&e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();if(!document.querySelector('dialog[open]')||paletteOpen)setPaletteOpen(v=>!v)}if(mod&&!e.shiftKey&&e.key==='/'){e.preventDefault();if(!document.querySelector('dialog[open]')||helpOpen)setHelpOpen(v=>!v)}};window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key)},[paletteOpen,helpOpen]);
 useEffect(()=>{const first=visible[0];requestAnimationFrame(()=>{if(first)document.getElementById('task-'+first.id)?.focus();else input.current?.focus()})},[]);
 const update=(k,v)=>setPrefs(p=>({...p,[k]:v}));
-const add=e=>{e.preventDefault();if(prefs.viewOnly||!draft.trim())return;const task={id:crypto.randomUUID(),text:draft.trim(),done:false,depth:scope?depth(scope)+1:0};setTasks(t=>{const at=scope?endOfBranch(t,t.findIndex(x=>x.id===scope.id)):t.length;return [...t.slice(0,at),task,...t.slice(at)]});setDraft('');input.current?.focus()};
+const add=e=>{e.preventDefault();if(prefs.viewOnly||!draft.trim())return;const task={id:crypto.randomUUID(),text:draft.trim(),done:false,depth:scope?depth(scope)+1:0};setTasks(t=>{const at=scope?t.findIndex(x=>x.id===scope.id)+1:0;return [...t.slice(0,at),task,...t.slice(at)]});setDraft('');input.current?.focus()};
 const paste=e=>{
 if(prefs.viewOnly)return;
 const source=e.clipboardData.getData('text/plain');
@@ -130,7 +130,7 @@ if(!source.includes('\n')&&!source.includes('\r'))return;
 const parsed=parsePaste(source);if(parsed.entries.length<2)return;
 e.preventDefault();
 const imported=parsed.entries.map(t=>({...t,id:crypto.randomUUID()}));
-setTasks(ts=>{const at=scope?endOfBranch(ts,ts.findIndex(t=>t.id===scope.id)):ts.length;return [...ts.slice(0,at),...imported.map(t=>({...t,depth:depth(t)+(scope?depth(scope)+1:0)})),...ts.slice(at)]});
+setTasks(ts=>{const at=scope?ts.findIndex(t=>t.id===scope.id)+1:0;return [...ts.slice(0,at),...imported.map(t=>({...t,depth:depth(t)+(scope?depth(scope)+1:0)})),...ts.slice(at)]});
 if(parsed.hierarchy)update('hierarchy',true);
 toast.success('Added '+imported.length+' tasks',{description:'Hint: Tab nests a note under its previous sibling.'});
 };
