@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef, useId} from 'react';
 import {createPortal} from 'react-dom';
+import {outsideDialog} from './dialog.js';
 import {THEMES,resolveTheme} from './themes.js';
 import {CommandPalette} from './command-palette.jsx';
 import {createRoot} from 'react-dom/client';
@@ -103,8 +104,8 @@ try{await navigator.clipboard.writeText(markdown);setCopied(true);setTimeout(()=
 catch{setCopyOpen(true)}
 };
 const [notice,setNotice]=useState('');
-const dialog=useRef(null);const bulkConfirm=useRef(null);const bulkPrevious=useRef(null);const shortcutCommands=useRef({});
-const requestBulkDelete=mode=>{if(prefs.viewOnly)return;bulkPrevious.current=document.activeElement;setConfirmRemove(mode)};
+const dialog=useRef(null);const bulkConfirm=useRef(null);const shortcutCommands=useRef({});
+const requestBulkDelete=mode=>{if(prefs.viewOnly)return;setConfirmRemove(mode)};
 useEffect(()=>{const media=matchMedia('(prefers-color-scheme: dark)');const change=e=>setSystemDark(e.matches);media.addEventListener('change',change);return ()=>media.removeEventListener('change',change)},[]);
 const activeTheme=resolveTheme(prefs.theme,systemDark);const dark=activeTheme.dark;
 useEffect(()=>{if(confirmRemove){dialog.current?.showModal();bulkConfirm.current?.focus()}else dialog.current?.close()},[confirmRemove]);
@@ -182,6 +183,26 @@ if(!e.shiftKey){const id=e.target.closest('[data-task-id]')?.dataset.taskId;cons
 };
 
 const focusTask=id=>requestAnimationFrame(()=>{const el=document.getElementById('task-'+id);if(!el)return;el.focus();el.setSelectionRange(el.value.length,el.value.length)});
+const modalAnchor=useRef(null);
+const anyModalOpen=paletteOpen||helpOpen||copyOpen||!!deleteId||!!confirmRemove;
+useEffect(()=>{
+if(anyModalOpen){
+if(!modalAnchor.current)modalAnchor.current={id:selectedTask.current,index:Math.max(0,visible.findIndex(t=>t.id===selectedTask.current))};
+return;
+}
+const anchor=modalAnchor.current;if(!anchor)return;modalAnchor.current=null;
+// Wait for native dialog focus restoration and any palette action to finish first.
+const frame=requestAnimationFrame(()=>requestAnimationFrame(()=>{
+if(document.querySelector('dialog[open]'))return;
+const current=tasksRef.current;
+const at=current.findIndex(t=>t.id===routeId());
+const available=visibleTasks(at>=0?current.slice(at+1,endOfBranch(current,at)):current);
+const target=available.find(t=>t.id===selectedTask.current)||available.find(t=>t.id===anchor.id)||available[Math.min(anchor.index,available.length-1)];
+if(target)focusTask(target.id);else input.current?.focus();
+}));
+return ()=>cancelAnimationFrame(frame);
+},[anyModalOpen]);
+
 const insert=(id,child)=>{if(prefs.viewOnly)return;const task={id:crypto.randomUUID(),text:'',done:false};const next=insertTask(tasks,id,child,task);if(next===tasks){setNotice('Could not insert note.');return}setTasks(revealTask(next,task.id));focusTask(task.id)};
 const changeLevel=(id,direction)=>{if(prefs.viewOnly)return;const next=indentBranch(tasks,id,direction);if(next===tasks){setNotice(direction>0?'Indent needs a previous sibling.':'Already at the top level.');return}setNotice('');setTasks(revealTask(next,id));focusTask(id)};
 const taskKey=(e,task)=>{
@@ -238,12 +259,12 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 <ul key={scopeId||'home'} className="task-list"><AnimatePresence initial={false}>{visible.map(task=><motion.li layout data-task-id={task.id} key={task.id} initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,x:-12,height:0,margin:0}} style={{marginLeft:Math.min(12,depth(task)-(scope?depth(scope)+1:0))*28}} className={'task'+(task.done?' done':'')}>{prefs.hierarchy&&(hasChildren(task)?<ToolButton className="branch-toggle" aria-expanded={!task.collapsed} aria-label={`${task.collapsed?'Expand':'Collapse'}: ${task.text}`} tip={task.collapsed?'Expand branch':'Collapse branch'} shortcut={task.collapsed?'Alt + →':'Alt + ←'} onClick={()=>collapseCurrent(task,!task.collapsed)}><svg width="12" height="12" viewBox="0 0 16 16" style={{transform:task.collapsed?'rotate(-90deg)':'rotate(0deg)'}}><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg></ToolButton>:<span className="branch-spacer"/>)}{!prefs.viewOnly&&<button className="checkbox" aria-label={`${task.done?'Mark incomplete':'Complete'}: ${task.text}`} aria-pressed={task.done} onClick={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:!t.done}:t))}>{task.done&&<motion.span initial={{scale:.5}} animate={{scale:1}}><Icon name="check"/></motion.span>}</button>}<TaskText id={"task-"+task.id} font={prefs.font} size={prefs.size} readOnly={prefs.viewOnly} className={'task-text'+(flashId===task.id?' copy-flash':'')} aria-label={prefs.hierarchy? `Edit task, level ${depth(task)+1}`:"Edit task"} value={task.text} onFocus={e=>{const el=e.currentTarget;el.setSelectionRange(el.value.length,el.value.length)}} onChange={e=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text:e.target.value}:t))} onBlur={()=>{if(!prefs.viewOnly)setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text:t.text.trim()||'Untitled task'}:t))}} onCopy={e=>{if(e.target.selectionStart!==e.target.selectionEnd)return;e.preventDefault();e.clipboardData.setData('text/plain',task.text);setFlashId(task.id);setTimeout(()=>setFlashId(null),600);toast.success('Note copied',{description:'Hint: use Copy Markdown for the whole list.'})}} onKeyDown={e=>taskKey(e,task)} maxLength={500}/>{prefs.hierarchy&&task.collapsed&&hasChildren(task)&&<button className="hidden-count" data-tooltip="Expand branch" onClick={()=>collapseCurrent(task,false)}>{endOfBranch(tasks,tasks.findIndex(t=>t.id===task.id))-tasks.findIndex(t=>t.id===task.id)-1} hidden</button>}<div className="row-tools">{hasChildren(task)&&<ToolButton tip="Open sublist" shortcut="Alt + Enter" aria-label={`Open sublist: ${task.text}`} icon="sublist" onClick={()=>openSublist(task.id)}/>}{!prefs.viewOnly&&prefs.hierarchy&&<div className="outline-actions"><ToolButton icon="outdent" tip="Outdent task" shortcut="Shift + Tab" aria-label="Outdent task" disabled={depth(task)===0} onClick={()=>changeLevel(task.id,-1)}/><ToolButton icon="indent" tip="Indent task" shortcut="Tab" aria-label="Indent task" disabled={indentBranch(tasks,task.id,1)===tasks} onClick={()=>changeLevel(task.id,1)}/><ToolButton icon="child" tip="Add child task" shortcut="Ctrl/⌘ + Enter" aria-label="Add child task"  onClick={()=>insert(task.id,true)}/></div>}{!prefs.viewOnly&&<ToolButton className="delete" icon="trash" tip="Delete note" shortcut="Delete" aria-label={`Delete note: ${task.text}`} onClick={()=>setDeleteId(task.id)}/>}</div>{!prefs.viewOnly&&<button className="insert-between" aria-label={`Insert note after: ${task.text}`} onClick={()=>insert(task.id,hasChildren(task)&&!task.collapsed)}><Icon name="plus" width="28" height="28"/></button>}</motion.li>)}</AnimatePresence></ul>
 {scoped.length===0&&<motion.div className="empty" initial={{opacity:0}} animate={{opacity:1}}><div className="empty-check"><Icon name="check" width="24" height="24"/></div><p>Nothing on your list. Yet.</p><span>Add a task above, then take it one at a time.</span></motion.div>}
 </main>
-<dialog ref={deleteDialog} className="confirm-dialog" onCancel={()=>setDeleteId(null)} onClose={()=>{if(deleteId)focusTask(deleteId);setDeleteId(null)}} aria-labelledby="delete-note-title"><h2 id="delete-note-title">Delete this note?</h2><p>Its children will be kept. You can undo with Ctrl/⌘ + Z.</p><div className="modal-actions"><button onClick={()=>{focusTask(deleteId);setDeleteId(null)}}>Cancel</button><button ref={deleteConfirm} className="confirm-remove" onClick={()=>{deleteTask(deleteId);setDeleteId(null)}}>Delete note</button></div></dialog>
-<dialog ref={dialog} className="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description" onCancel={()=>setConfirmRemove(false)} onClose={()=>{setConfirmRemove(false);bulkPrevious.current?.focus()}} onClick={e=>{if(e.target===dialog.current)setConfirmRemove(false)}}>
+<dialog ref={deleteDialog} className="confirm-dialog" onCancel={()=>setDeleteId(null)} onClick={e=>{if(outsideDialog(e))setDeleteId(null)}} onClose={()=>setDeleteId(null)} aria-labelledby="delete-note-title"><h2 id="delete-note-title">Delete this note?</h2><p>Its children will be kept. You can undo with Ctrl/⌘ + Z.</p><div className="modal-actions"><button onClick={()=>setDeleteId(null)}>Cancel</button><button ref={deleteConfirm} className="confirm-remove" onClick={()=>{deleteTask(deleteId);setDeleteId(null)}}>Delete note</button></div></dialog>
+<dialog ref={dialog} className="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description" onCancel={()=>setConfirmRemove(false)} onClose={()=>setConfirmRemove(false)} onClick={e=>{if(outsideDialog(e))setConfirmRemove(false)}}>
 {confirmRemove&&<><h2 id="confirm-title">{confirmRemove==='completed'?'Clear completed tasks?':'Remove all tasks?'}</h2><p id="confirm-description">{confirmRemove==='completed'?`${tasks.filter(t=>t.done).length} completed tasks will be removed. Their unfinished children will be kept.`:`All ${tasks.length} tasks will be removed from this browser.`} This cannot be undone.</p><div className="modal-actions"><button onClick={()=>setConfirmRemove(false)}>Cancel</button><button ref={bulkConfirm} className="confirm-remove" onClick={()=>{if(prefs.viewOnly)return;if(confirmRemove==='completed')setTasks(ts=>removePreservingChildren(ts,ts.filter(t=>t.done).map(t=>t.id)));else{toast.dismiss();deletedRecords.current=[];setTasks([])}setConfirmRemove(false)}}>{confirmRemove==='completed'?'Clear completed':'Remove all tasks'}</button></div></>}
 
 </dialog>
-<dialog ref={helpDialog} className="help-dialog confirm-dialog" aria-labelledby="help-title" onCancel={()=>setHelpOpen(false)} onClose={()=>{setHelpOpen(false);helpButton.current?.focus()}}>
+<dialog ref={helpDialog} className="help-dialog confirm-dialog" aria-labelledby="help-title" onCancel={()=>setHelpOpen(false)} onClose={()=>setHelpOpen(false)} onClick={e=>{if(outsideDialog(e))setHelpOpen(false)}}>
 <div className="help-header"><div><span className="help-eyebrow">GOTTADO GUIDE</span><h2 id="help-title">Keyboard shortcuts</h2></div><button autoFocus className="action-button" onClick={()=>setHelpOpen(false)}>Close</button></div>
 <p className="help-intro">Use Ctrl on Windows/Linux or ⌘ on Mac. Note shortcuts work while editing a note. List shortcuts work anywhere outside a dialog. Lists can be nested to any depth.</p>
 <div className="shortcut-grid">
@@ -299,7 +320,7 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 </div>
 <div className="help-footer"><section><h3>Paste a list</h3><p>Paste two or more lines into “What needs doing?” to add tasks immediately. Bullets, numbering, checkboxes, and indentation are recognized. Table columns stay together per row.</p></section><section><h3>Copy & settings</h3><p>Copy Markdown includes every task, including collapsed children, indentation, and completion checkboxes. Use arrow keys in settings menus, Enter to select, and Esc to close.</p></section></div>
 </dialog>
-<dialog ref={copyDialog} className="confirm-dialog copy-dialog" aria-labelledby="copy-title" onCancel={()=>setCopyOpen(false)} onClose={()=>{setCopyOpen(false);copyButton.current?.focus()}}>
+<dialog ref={copyDialog} className="confirm-dialog copy-dialog" aria-labelledby="copy-title" onCancel={()=>setCopyOpen(false)} onClose={()=>setCopyOpen(false)} onClick={e=>{if(outsideDialog(e))setCopyOpen(false)}}>
 <h2 id="copy-title">Copy your Markdown</h2><p>Your browser could not copy automatically. Select this text and use Ctrl/⌘ + C.</p><textarea aria-label="Markdown list" readOnly value={toMarkdown(exportTasks,true)} onFocus={e=>e.target.select()}/><button autoFocus className="action-button" onClick={()=>setCopyOpen(false)}>Done</button>
 </dialog><CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} commands={commands}/><Toaster theme={dark?'dark':'light'} position="bottom-right" duration={1800} visibleToasts={6} closeButton toastOptions={{className:'app-toast'}}/></div></MotionConfig>}
 createRoot(document.getElementById('root')).render(<App/>);

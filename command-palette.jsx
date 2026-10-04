@@ -1,14 +1,15 @@
 import React,{useState,useEffect,useRef} from 'react';
+import {outsideDialog} from './dialog.js';
 import {searchCommands} from './themes.js';
 export function CommandPalette({open,onClose,commands}){
-const dialog=useRef(null),input=useRef(null),previous=useRef(null);
+const dialog=useRef(null),input=useRef(null);
 const [query,setQuery]=useState(''),[active,setActive]=useState(0);
 const matches=searchCommands(commands,query);
-useEffect(()=>{if(open){previous.current=document.activeElement;setQuery('');setActive(0);dialog.current.showModal();input.current.focus()}else dialog.current?.close()},[open]);
+useEffect(()=>{if(open){setQuery('');setActive(0);dialog.current.showModal();input.current.focus()}else dialog.current?.close()},[open]);
 useEffect(()=>{dialog.current?.querySelector('[data-active="true"]')?.scrollIntoView({block:'nearest'})},[active,query]);
-const close=()=>{onClose();previous.current?.focus()};
+const close=()=>onClose();
 const run=c=>{if(!c||c.disabled)return;dialog.current.close();close();requestAnimationFrame(c.run)};
-return <dialog ref={dialog} className="command-dialog" aria-labelledby="command-title" onCancel={e=>{e.preventDefault();close()}} onClick={e=>{if(e.target===dialog.current)close()}}>
+return <dialog ref={dialog} className="command-dialog" aria-labelledby="command-title" onCancel={e=>{e.preventDefault();close()}} onClick={e=>{if(outsideDialog(e))close()}}>
 <div className="command-search"><button aria-label="Search" onClick={()=>input.current?.focus()}>⌕</button><input ref={input} id="command-title" role="combobox" aria-label="Search notes and actions" aria-expanded="true" aria-controls="command-results" aria-activedescendant={matches[active]?'command-'+matches[active].id:undefined} placeholder="Search notes, actions, themes…" value={query} onChange={e=>{setQuery(e.target.value);setActive(0)}} onKeyDown={e=>{
 if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();setActive(i=>matches.length?(i+(e.key==='ArrowDown'?1:-1)+matches.length)%matches.length:0)}
 if(e.key==='Home'){e.preventDefault();setActive(0)}if(e.key==='End'){e.preventDefault();setActive(Math.max(0,matches.length-1))}

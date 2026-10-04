@@ -49,3 +49,5 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 - [x] Per-note trash icons open deletion confirmation; Ctrl/⌘+Space toggles the focused note’s completion and appears in the guide and action search.
 
 - [x] Navigating or tabbing to a note places the caret at the end of its text, including search results and sublist navigation.
+
+- [x] All modals close on outside clicks and restore the last focused note at its text end, or a neighboring note if it was deleted.
