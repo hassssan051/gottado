@@ -7,3 +7,8 @@ tmp
 check.cjs
 
 build.log
+
+# Local credentials
+.env
+.env.*
+!.env.example

@@ -54,3 +54,5 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 
 - [x] Larger search icon in the action modal; navigating theme options previews them immediately, and closing without selecting restores the saved theme.
 - [x] Parent deletion preserves children by default; checking “Delete all children too” deletes the whole branch. Undo restores the entire deleted branch with its nesting and completion state.
+
+- [x] Feedback header icon and action-search entry open the Quackback portal in a new tab. Local API management helper reads ignored credentials without exposing them to the browser.
