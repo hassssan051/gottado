@@ -22,16 +22,16 @@
 
 - [x] Alt+Up/Down reorders sibling branches, including descendants, without changing depth; first/last siblings stop at their boundaries.
 - [x] View-only mode prevents text editing, completion, deletion, insertion, indentation, and reorder; permits folding, navigation, copy, and sharing.
-- [x] View-only alignment and reading width; theme, font, and size remain available. Reading preferences only affect view-only presentation.
+- [x] View-only uses fixed reading width; theme, font, and size remain available. Mode toggle is an icon button.
 - [x] Wrapping new-note textarea; Up/Down navigate its visual lines and move to the last/first visible note at the edges. Notes navigate back to the draft at list boundaries.
 - [x] Theme-colored editing outline and short note-copy outline flash.
 - [x] Minimal plus controls before the first note and between visible notes, revealed on hover or focus.
 - [x] Ctrl/⌘+C copies the whole focused note when no text is selected; selected text retains ordinary clipboard behavior.
-- [x] Ctrl/⌘+Backspace and trash icons open note-deletion confirmation; Enter confirms immediately. Undo remains available for the session, even after its toast disappears.
+- [x] Delete and the action palette open note-deletion confirmation; Enter confirms immediately. Undo remains available for the session, even after its toast disappears.
 - [x] Combined action/note search, visible search icon/button, and delayed, shorter tooltips. Exact note matches rank above loosely matching actions; selecting a result navigates to its parent list.
 - [x] Unlimited logical nesting, sublist hash routes, back-to-parent button, browser history, and wrapping breadcrumbs. Physical indentation is capped to keep deeply nested notes readable.
 - [x] Shareable whole-list and sublist snapshot links; recipients open a separate snapshot without overwriting local notes.
-- [x] Brief bottom-right feedback with feature hints and a consistent quick animation; deletion feedback lasts 2.2 seconds and other feedback 1.8 seconds.
+- [x] Brief bottom-right feedback with feature hints and a consistent springy entrance and a short springy downward-slide dismissal; deletion feedback lasts 2.2 seconds and other feedback 1.8 seconds.
 - [x] Remove the hierarchy option; nesting is always available.
 
 ## Route and performance notes
@@ -39,3 +39,7 @@
 Routes use `#/list/<note-id>` and `#/shared/list/<note-id>`. They stay within the SPA, work without server rewrite configuration, and do not fetch data. Local list routes depend on that browser having the corresponding note; share links carry their own snapshot. Scope navigation slices the in-memory outline to a branch; it does not introduce network usage. Very large lists still need indexing and rendering benchmarks before performance promises are made.
 
 Backend work is deliberately deferred. The current app continues to save ordinary notes immediately to localStorage; it does not display a misleading server “Saved!” countdown.
+
+- [x] Remove inline deletion, clear-completed, remove-all, collapse-all, and expand-all buttons; retain their palette actions and document shortcuts in both modals. Bulk deletion shortcuts open confirmation with focus on the confirm button.
+
+- [x] Only notes with children expose sublist navigation; leaf routes redirect to their containing list. A doorway-arrow icon opens sublists, Alt+Enter enters them, and Alt+Backspace returns with focus restored. Both shortcuts are documented in the action palette and guide.
