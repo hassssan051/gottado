@@ -1,4 +1,21 @@
 export const depth=t=>t.depth||0;
+// Parent completion is derived from its children, including collapsed branches.
+export function normalizeCompletion(tasks){
+let result=tasks;const stack=[];
+for(let i=tasks.length-1;i>=0;i--){
+const level=depth(tasks[i]);let hasChildren=false,done=true;
+while(stack.length&&stack.at(-1).level>level){hasChildren=true;done=stack.pop().done&&done}
+if(!hasChildren)done=!!tasks[i].done;
+if(done!==tasks[i].done){if(result===tasks)result=tasks.slice();result[i]={...tasks[i],done}}
+stack.push({level,done});
+}
+return result;
+}
+export function toggleCompletion(tasks,id){
+const index=tasks.findIndex(t=>t.id===id);if(index<0)return tasks;
+const end=endOfBranch(tasks,index),done=!tasks[index].done;
+return normalizeCompletion(tasks.map((t,i)=>i>=index&&i<end?{...t,done}:t));
+}
 export function endOfBranch(tasks,index){let end=index+1;while(end<tasks.length&&depth(tasks[end])>depth(tasks[index]))end++;return end}
 export function indentBranch(tasks,id,direction){
 const index=tasks.findIndex(t=>t.id===id);if(index<0)return tasks;

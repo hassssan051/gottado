@@ -57,3 +57,4 @@ Backend work is deliberately deferred. The current app continues to save ordinar
 
 - [x] Feedback header icon and action-search entry open the Quackback portal in a new tab. Local API management helper reads ignored credentials without exposing them to the browser.
 - [x] Use “Fight procrastination by listing your troubles away” once on the empty main page, in share metadata, and in project documentation. The browser tab reads “Gottado: Fight Procrastination.”
+- [x] Parent completion follows all descendants. Checking or unchecking a parent applies to its branch; child changes, insertions, moves, deletion, undo, and imports keep ancestor completion consistent.
