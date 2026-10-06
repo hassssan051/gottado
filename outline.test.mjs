@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 // The app's .js modules are ESM although the existing package is CommonJS.
 const moduleURL=name=>'data:text/javascript;base64,'+Buffer.from(readFileSync(new URL(name,import.meta.url),'utf8')).toString('base64');
 const outlineURL=moduleURL('./outline.js');
-const {moveBranch,indentBranch,insertTask,removePreservingChildren,visibleTasks,normalizeCompletion,toggleCompletion}=await import(outlineURL);
+const {moveBranch,moveBranchTo,indentBranch,insertTask,removePreservingChildren,visibleTasks,normalizeCompletion,toggleCompletion}=await import(outlineURL);
 const {restoreDeleted,deletionRecord}=await import('data:text/javascript;base64,'+Buffer.from(readFileSync(new URL('./undo.js',import.meta.url),'utf8').replace("'./outline.js'",JSON.stringify(outlineURL))).toString('base64'));
 const {parsePaste}=await import(moduleURL('./paste.js'));
 const {toMarkdown}=await import(moduleURL('./markdown.js'));
@@ -27,6 +27,19 @@ const removedChild=deletionRecord(partial,'b');
 const afterRemoval=normalizeCompletion(removePreservingChildren(partial,['b']));
 assert.equal(normalizeCompletion(restoreDeleted(afterRemoval,removedChild))[0].done,false,'Undoing deletion of an incomplete child reopens its parent');
 const shape=ts=>ts.map(t=>[t.id,t.depth]);
+assert.deepEqual(shape(moveBranchTo(tasks,'a','other','child')),[['parent',0],['b',1],['other',0],['a',1],['grandchild',2]],'Dragging into a leaf creates a sublist and keeps descendants');
+assert.deepEqual(shape(moveBranchTo(tasks,'a','other','after')),[['parent',0],['b',1],['other',0],['a',0],['grandchild',1]],'Dragging after a root outdents the entire branch');
+assert.deepEqual(shape(moveBranchTo(tasks,'other','a','before')),[['parent',0],['other',1],['a',1],['grandchild',2],['b',1]],'Dragging before a child adopts its level');
+assert.deepEqual(shape(moveBranchTo(tasks,'other','a','after')),[['parent',0],['a',1],['grandchild',2],['other',1],['b',1]],'After means after the entire target branch');
+assert.deepEqual(shape(moveBranchTo(tasks,'a',null,'list')),[['parent',0],['b',1],['other',0],['a',0],['grandchild',1]],'Home drop returns a branch to root');
+assert.deepEqual(shape(moveBranchTo(tasks,'other','parent','list')),[['parent',0],['a',1],['grandchild',2],['b',1],['other',1]],'Breadcrumb drop appends to the chosen list');
+for(const target of ['parent','a','grandchild','b'])assert.equal(moveBranchTo(tasks,'parent',target,'child'),tasks,'Cannot drop into self or descendants');
+assert.equal(moveBranchTo(tasks,'missing','a','before'),tasks);
+assert.equal(moveBranchTo(tasks,'a','missing','before'),tasks);
+assert.equal(moveBranchTo(tasks,'a','other','invalid'),tasks);
+assert.equal(moveBranchTo(tasks,'other',null,'list'),tasks,'Unchanged drop is a no-op');
+assert.equal(moveBranchTo(hidden,'parent','other','child').find(t=>t.id==='parent').collapsed,true,'Collapsed branch state survives dragging');
+assert.equal(normalizeCompletion(moveBranchTo(completed,'other','a','child')).find(t=>t.id==='parent').done,false,'Moving an incomplete branch reopens its new ancestors');
 assert.deepEqual(shape(moveBranch(tasks,'a',1)),[['parent',0],['b',1],['a',1],['grandchild',2],['other',0]]);
 assert.deepEqual(shape(moveBranch(tasks,'b',-1)),[['parent',0],['a',1],['b',2],['grandchild',2],['other',0]],'Up enters the preceding sublist');
 assert.deepEqual(shape(moveBranch(tasks,'a',-1)),[['a',0],['grandchild',1],['parent',0],['b',1],['other',0]],'First child exits before its parent with descendants');
@@ -36,6 +49,9 @@ assert.equal(moveBranch(tasks,'other',1),tasks);
 assert.deepEqual(shape(moveBranch([task('before'),...tasks],'before',1)),[['parent',0],['before',1],['a',1],['grandchild',2],['b',1],['other',0]],'Down enters a neighboring sublist');
 assert.deepEqual(shape(moveBranch([task('parent'),task('a',1),task('child',2)],'a',1)),[['parent',0],['a',0],['child',1]],'End of outline permits outdenting');
 const validate=ts=>{assert.equal(ts[0].depth,0);for(let i=1;i<ts.length;i++)assert.ok(ts[i].depth<=ts[i-1].depth+1)};
+for(const id of tasks.map(t=>t.id))for(const target of [null,...tasks.map(t=>t.id)])for(const position of ['before','after','child','list']){
+const moved=moveBranchTo(tasks,id,target,position);validate(moved);assert.equal(new Set(moved.map(t=>t.id)).size,tasks.length);
+}
 for(const id of tasks.map(t=>t.id))for(const direction of [-1,1]){let moved=tasks;for(let i=0;i<30;i++){moved=moveBranch(moved,id,direction);validate(moved);assert.equal(new Set(moved.map(t=>t.id)).size,tasks.length)}}
 const deep=Array.from({length:30},(_,i)=>task('n'+i,i));
 assert.ok(toggleCompletion(deep,'n29').every(t=>t.done),'Completion propagates across arbitrary nesting depth');
@@ -58,6 +74,10 @@ assert.equal(restoreDeleted(changedNeighbors,branchRecord).at(-1).text,'Edited a
 assert.equal(deletionRecord(branchTasks,'after',[],true).branch,null,'Leaf deletion is a single-note undo');
 assert.equal(parsePaste(deep.map(t=>'  '.repeat(t.depth)+t.text).join('\n')).entries.at(-1).depth,29);
 assert.ok(toMarkdown(deep).split('\n').at(-1).startsWith('  '.repeat(29)));
+assert.equal(toMarkdown([{...task('done'),done:true},task('child',1)]),'- done\n  - child','Copied lists omit checked and unchecked brackets');
+assert.equal(toMarkdown([{...task('multi',1),text:'first\nsecond'}]),'  - first\n    second','Multiline bullets retain nesting');
+assert.equal(toMarkdown([task('a'),task('b',1)],false),'- a\n- b');
 assert.deepEqual(visibleTasks(tasks.map(t=>t.id==='a'?{...t,collapsed:true}:t)).map(t=>t.id),['parent','a','b','other']);
 assert.equal(searchCommands([{id:'action',label:'Add child to selected task',group:'Actions',disabled:true},{id:'note',label:'Child A',group:'Notes'}],'Child A')[0].id,'note');
 console.log('Outline checks passed: movement across sublists, descendants, unlimited nesting, undo, paste, export, visibility, and note search.');
+await import('./drag.test.mjs');

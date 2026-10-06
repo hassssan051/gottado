@@ -18,10 +18,14 @@
 - [ ] Benchmark large lists and very deep nesting. Replace repeated array scans with indexed parent/branch relationships, virtualize long visible lists, and debounce search if measurements justify it.
 - [ ] Add compact or compressed sharing/export for large lists. Snapshot URLs grow with note content and can exceed the practical limits of messaging apps.
 - [ ] Add a durable “Save shared snapshot to my list” action. Snapshots currently stay separate in sessionStorage and can be edited within that tab without replacing the saved local list.
-- [ ] Add an accessible touch-first insertion affordance; current between-note insertion appears on hover or keyboard focus.
 - [ ] Test cross-browser clipboard, wrapping, reduced motion, mobile layout, and assistive-technology behavior more broadly.
 
 ## Implemented
+
+- [x] Drag notes using dedicated handles to reorder, nest under another note, or move into a breadcrumb list. Descendants stay attached, self/descendant drops are blocked, edge scrolling is supported, and Escape cancels before any change.
+- [x] Between-note plus opens New note and Child note choices, replacing the trailing child-add icon. Only the plus is clickable; touch devices always show it.
+- [x] Two separate Backspace presses within 800 ms delete an empty note without confirmation. Children are preserved, held keys cannot trigger deletion, and undo remains available.
+- [x] Copied Markdown uses plain nested bullets without completion brackets.
 
 - [x] Alt+Up/Down moves branches freely into and out of sublists, keeping descendants attached and following focus across scoped views.
 - [x] View-only mode prevents text editing, completion, deletion, insertion, indentation, and reorder; permits folding, navigation, copy, and sharing. Checkboxes are hidden.

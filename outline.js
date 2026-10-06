@@ -51,6 +51,23 @@ return tasks.map(t=>parents.has(t.id)?{...t,collapsed:false}:t);
 }
 export function setAllCollapsed(tasks,collapsed){return tasks.map((t,i)=>({...t,collapsed:collapsed&&i+1<tasks.length&&depth(tasks[i+1])>depth(t)}))}
 
+// Move an intact branch to an explicit drop target. Never accept a descendant.
+export function moveBranchTo(tasks,id,targetId,position){
+const index=tasks.findIndex(t=>t.id===id);if(index<0)return tasks;
+const end=endOfBranch(tasks,index),target=tasks.findIndex(t=>t.id===targetId);
+if(!['before','after','child','list'].includes(position))return tasks;
+if(target>=index&&target<end)return tasks;
+if(target<0&&(position!=='list'||targetId!==null))return tasks;
+const at=target<0?tasks.length:position==='before'?target:endOfBranch(tasks,target);
+const level=target<0?0:depth(tasks[target])+(['child','list'].includes(position)?1:0);
+const delta=level-depth(tasks[index]);
+const branch=tasks.slice(index,end).map(t=>delta?{...t,depth:depth(t)+delta}:t);
+const rest=[...tasks.slice(0,index),...tasks.slice(end)];
+const insertion=at>index?at-(end-index):at;
+const result=[...rest.slice(0,insertion),...branch,...rest.slice(insertion)];
+return result.every((t,i)=>t.id===tasks[i].id&&depth(t)===depth(tasks[i]))?tasks:result;
+}
+
 // Move a branch through outline rows, changing its level at sublist boundaries.
 export function moveBranch(tasks,id,direction){
 const i=tasks.findIndex(t=>t.id===id);if(i<0)return tasks;
