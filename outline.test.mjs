@@ -86,3 +86,4 @@ assert.deepEqual(visibleTasks(tasks.map(t=>t.id==='a'?{...t,collapsed:true}:t)).
 assert.equal(searchCommands([{id:'action',label:'Add child to selected task',group:'Actions',disabled:true},{id:'note',label:'Child A',group:'Notes'}],'Child A')[0].id,'note');
 console.log('Outline checks passed: movement across sublists, descendants, unlimited nesting, undo, paste, export, visibility, and note search.');
 await import('./drag.test.mjs');
+await import('./action-history.test.mjs');

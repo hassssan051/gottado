@@ -38,7 +38,8 @@
 - [x] Theme-colored editing outline and short note-copy outline flash; copying changes only the outline.
 - [x] Minimal plus controls between visible notes, revealed on hover or focus. The new-note input handles insertion before the first note.
 - [x] Ctrl/⌘+C copies the whole focused note when no text is selected; selected text retains ordinary clipboard behavior.
-- [x] Per-note trash icons, Delete, and the action palette open deletion confirmation; Enter confirms immediately. Undo remains available for the session, even after its toast disappears.
+- [x] Per-note trash icons, Delete, and the action palette open deletion confirmation; Enter confirms immediately. Deletion undo remains available after its toast disappears while it is within the last five app actions.
+- [x] Unified undo tracks the last five reversible app actions across insertion/paste, completion, moving/nesting, individual and bulk deletion, folding, navigation, settings, and experimental toggles. Ctrl/⌘+Z inside textboxes always remains native text undo; outside it reverses app actions newest first. Action search offers explicit app undo. Empty history explains the five-action limit, and undo preserves later text edits to surviving notes. History is kept only for the current session.
 - [x] Parent deletion preserves children by default; checking “Delete all children too” deletes the whole branch. Undo restores the deleted branch with its nesting and completion state.
 - [x] Parent completion follows all descendants. Checking or unchecking a parent applies to its branch; child changes, insertions, moves, deletion, undo, and imports keep ancestor completion consistent. Ctrl/⌘+Space toggles completion and is documented in the guide and action search.
 - [x] Combined action/note search, visible search icon/button, and delayed tooltips. Exact note matches rank above loosely matching actions; selecting a result navigates to its parent list.

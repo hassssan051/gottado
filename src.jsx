@@ -13,7 +13,8 @@ import {InsertBetween} from './insert-between.jsx';
 import {useOutlineDrag} from './use-outline-drag.jsx';
 import {ExperimentalFeatures} from './experimental-features.jsx';
 import {resolveExperiments} from './experimental.js';
-import {deletionRecord,restoreDeleted} from './undo.js';
+import {createAction,pushAction,reverseAction,shouldUndoApp,UNDO_LIMIT} from './action-history.js';
+import {deletionRecord} from './undo.js';
 import {depth,indentBranch,removePreservingChildren,insertTask,endOfBranch,visibleTasks,parentIndex,revealTask,setAllCollapsed,moveBranch,moveBranchTo,normalizeCompletion,toggleCompletion} from './outline.js';
 
 // Retain legacy storage keys so renaming Gottado preserves existing notes and preferences.
@@ -83,11 +84,13 @@ const [tasks,storeTasks]=useState(()=>normalizeCompletion((()=>{
 if(location.hash.startsWith('#/shared')){try{return JSON.parse(sessionStorage.getItem('just-todo-shared-snapshot'))||[]}catch{return []}}
 if(location.hash.startsWith('#share=')){try{const payload=JSON.parse(decodeURIComponent(location.hash.slice(7)));if(!Array.isArray(payload)||payload.length>10000)throw Error();let previous=-1;const imported=payload.map(t=>{if(typeof t.text!=='string'||!Number.isInteger(t.depth)||t.depth<0||t.depth>previous+1)throw Error();previous=t.depth;return {id:crypto.randomUUID(),text:t.text.slice(0,500),depth:t.depth,done:!!t.done,collapsed:!!t.collapsed}});try{sessionStorage.setItem('just-todo-shared-snapshot',JSON.stringify(imported))}catch{}history.replaceState(null,'',location.pathname+location.search+'#/shared');return imported}catch{history.replaceState(null,'',location.pathname+location.search+'#/')}}
 return read('just-todo-tasks',[])})()));
-const setTasks=update=>storeTasks(previous=>normalizeCompletion(typeof update==='function'?update(previous):update));
 const tasksRef=useRef(tasks);tasksRef.current=tasks;
-const prefsRef=useRef(null);const deletedRecords=useRef([]);
-const [prefs,setPrefs]=useState(()=>{const {alignment,readingWidth,...saved}=read('just-todo-prefs',{});return {font:'Excalifont',size:'medium',hidden:false,viewOnly:false,...saved,experimental:resolveExperiments(saved.experimental),theme:saved.theme||'dark',hierarchy:true,...(sharedSnapshot?{viewOnly:true}: {})}});
+const actionHistory=useRef([]);
+const setTasks=(update,label='Notes changed',record=true)=>{const previous=tasksRef.current,next=normalizeCompletion(typeof update==='function'?update(previous):update);if(record)actionHistory.current=pushAction(actionHistory.current,createAction({tasks:previous},{tasks:next},label,scopeRef.current));tasksRef.current=next;storeTasks(next)};
+const prefsRef=useRef(null);
+const [prefs,storePrefs]=useState(()=>{const {alignment,readingWidth,...saved}=read('just-todo-prefs',{});return {font:'Excalifont',size:'medium',hidden:false,viewOnly:false,...saved,experimental:resolveExperiments(saved.experimental),theme:saved.theme||'dark',hierarchy:true,...(sharedSnapshot?{viewOnly:true}: {})}});
 prefsRef.current=prefs;
+const setPrefs=(update,label='Settings changed')=>{const previous=prefsRef.current,next=typeof update==='function'?update(previous):update;const keys=Object.keys(next).filter(key=>JSON.stringify(next[key])!==JSON.stringify(previous[key]));const before=Object.fromEntries(keys.map(key=>[key,previous[key]])),after=Object.fromEntries(keys.map(key=>[key,next[key]]));actionHistory.current=pushAction(actionHistory.current,createAction(before,after,label));prefsRef.current=next;storePrefs(next)};
 const [previewTheme,setPreviewTheme]=useState(null);
 const [systemDark,setSystemDark]=useState(()=>matchMedia('(prefers-color-scheme: dark)').matches);
 const [confirmRemove,setConfirmRemove]=useState(false);
@@ -98,13 +101,21 @@ useEffect(()=>{if(helpOpen)helpDialog.current?.showModal();else helpDialog.curre
 const [copyOpen,setCopyOpen]=useState(false);const copyDialog=useRef(null);const copyButton=useRef(null);
 const [copied,setCopied]=useState(false);
 useEffect(()=>{if(copyOpen)copyDialog.current?.showModal();else copyDialog.current?.close()},[copyOpen]);
-const undoRecord=record=>{
-if(prefsRef.current.viewOnly)return;
-if(!deletedRecords.current.includes(record))return;
-deletedRecords.current=deletedRecords.current.filter(r=>r!==record);
-setTasks(ts=>revealTask(restoreDeleted(ts,record,!!prefsRef.current.hierarchy),record.task.id));
-toast.dismiss(record.toastId);focusTask(record.task.id);
+const undoAction=expected=>{
+const latest=actionHistory.current.at(-1);
+if(!latest){toast('Can’t undo further',{description:`Only the last ${UNDO_LIMIT} app actions are kept. Hint: textboxes use native text undo.`});return}
+if(expected&&expected!==latest){toast('Undo newer actions first',{description:'Hint: use Find notes and actions to undo the latest app action.'});return}
+actionHistory.current.pop();
+const restored=reverseAction({tasks:tasksRef.current,...prefsRef.current,scopeId:scopeRef.current},latest);
+if(latest.changed.includes('tasks')){setTasks(restored.tasks,'',false);navigate(latest.scopeId,true,false)}
+const prefKeys=latest.changed.filter(key=>key!=='tasks'&&key!=='scopeId');
+if(prefKeys.length){const next={...prefsRef.current,...Object.fromEntries(prefKeys.map(key=>[key,restored[key]]))};prefsRef.current=next;storePrefs(next)}
+if(latest.changed.includes('scopeId'))navigate(restored.scopeId,true,false);
+setDeleteId(null);setConfirmRemove(false);setNotice('');
+toast.success('Undone: '+latest.label,{description:'Hint: Ctrl/⌘ + Z outside textboxes undoes up to five app actions.'});
 };
+const undoRef=useRef(null);undoRef.current=undoAction;
+useEffect(()=>{const key=e=>{if(!shouldUndoApp(e))return;e.preventDefault();undoRef.current()};window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key)},[]);
 const copyMarkdown=async()=>{
 const markdown=toMarkdown(exportTasks,true);
 try{await navigator.clipboard.writeText(markdown);setCopied(true);setTimeout(()=>setCopied(false),1800);toast.success('Markdown copied',{description:'Hint: Ctrl/⌘ + C copies the focused note.'})}
@@ -121,17 +132,25 @@ const [deleteId,setDeleteId]=useState(null);const [deleteChildren,setDeleteChild
 const [flashId,setFlashId]=useState(null);
 const routeId=()=>{try{return location.hash.startsWith('#/shared/list/')?decodeURIComponent(location.hash.slice(14)):location.hash.startsWith('#/list/')?decodeURIComponent(location.hash.slice(7)):null}catch{return null}};
 const [scopeId,setScopeId]=useState(routeId);
-useEffect(()=>{const change=()=>setScopeId(routeId());window.addEventListener('hashchange',change);return ()=>window.removeEventListener('hashchange',change)},[]);
+const scopeRef=useRef(scopeId);scopeRef.current=scopeId;
+useEffect(()=>{const change=()=>{const next=routeId();actionHistory.current=pushAction(actionHistory.current,createAction({scopeId:scopeRef.current},{scopeId:next},'List navigation'));scopeRef.current=next;setScopeId(next)};window.addEventListener('hashchange',change);return ()=>window.removeEventListener('hashchange',change)},[]);
 useEffect(()=>{if(deleteId){setDeleteChildren(false);deleteDialog.current?.showModal();deleteConfirm.current?.focus()}else deleteDialog.current?.close()},[deleteId]);
-const navigate=(id,replace=false)=>{if(id){const i=tasksRef.current.findIndex(t=>t.id===id);if(i<0||endOfBranch(tasksRef.current,i)<=i+1)return}const hash=(sharedSnapshot?'/shared':'')+(id?'/list/'+encodeURIComponent(id):'/');if(replace)history.replaceState(null,'',location.pathname+location.search+'#'+hash);else location.hash=hash;setScopeId(id)};
+const navigate=(id,replace=false,record=true,revealId=null)=>{
+const beforeScope=scopeRef.current,previous=tasksRef.current;
+if(id){const i=previous.findIndex(t=>t.id===id);if(i<0||endOfBranch(previous,i)<=i+1)id=null}
+const next=revealId?revealTask(previous,revealId):previous;
+if(record)actionHistory.current=pushAction(actionHistory.current,createAction({scopeId:beforeScope,tasks:previous},{scopeId:id,tasks:next},'List navigation',beforeScope));
+if(revealId)setTasks(next,'',false);
+const hash=(sharedSnapshot?'/shared':'')+(id?'/list/'+encodeURIComponent(id):'/');if(replace)history.replaceState(null,'',location.pathname+location.search+'#'+hash);else location.hash=hash;scopeRef.current=id;setScopeId(id);
+};
 const [draft,setDraft]=useState('');const input=useRef(null);
 useEffect(()=>{if(sharedSnapshot){try{sessionStorage.setItem('just-todo-shared-snapshot',JSON.stringify(tasks))}catch{}return}try{localStorage.setItem('just-todo-tasks',JSON.stringify(tasks))}catch{}},[tasks,sharedSnapshot]);
 useEffect(()=>{if(sharedSnapshot)return;try{localStorage.setItem('just-todo-prefs',JSON.stringify(prefs))}catch{}},[prefs]);
 useEffect(()=>{const root=document.documentElement;root.dataset.theme=activeTheme.id;root.dataset.colorScheme=dark?'dark':'light';['bg','ink','muted','line','soft','accent'].forEach((name,i)=>root.style.setProperty('--'+name,activeTheme.colors[i]));root.style.background=activeTheme.colors[0];root.style.color=activeTheme.colors[1];root.style.colorScheme=dark?'dark':'light';document.querySelector('meta[name=theme-color]')?.setAttribute('content',activeTheme.colors[0])},[activeTheme,dark]);
 useEffect(()=>{const key=e=>{if(e.isComposing)return;const mod=e.ctrlKey||e.metaKey;if(mod&&e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();if(!document.querySelector('dialog[open]')||paletteOpen)setPaletteOpen(v=>!v)}if(mod&&!e.shiftKey&&e.key==='/'){e.preventDefault();if(!document.querySelector('dialog[open]')||helpOpen)setHelpOpen(v=>!v)}};window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key)},[paletteOpen,helpOpen]);
 useEffect(()=>{const first=visible[0];requestAnimationFrame(()=>{if(first)focusTask(first.id);else input.current?.focus()})},[]);
-const update=(k,v)=>setPrefs(p=>({...p,[k]:v}));
-const add=e=>{e.preventDefault();if(prefs.viewOnly||!draft.trim())return;const task={id:crypto.randomUUID(),text:draft.trim(),done:false,depth:scope?depth(scope)+1:0};setTasks(t=>{const at=scope?t.findIndex(x=>x.id===scope.id)+1:0;return [...t.slice(0,at),task,...t.slice(at)]});setDraft('');input.current?.focus()};
+const update=(k,v)=>setPrefs(p=>({...p,[k]:v}),({font:'Font',size:'Font size',theme:'Theme',viewOnly:'Mode',hidden:'Header visibility',experimental:'Experimental features'}[k]||'Settings')+' changed');
+const add=e=>{e.preventDefault();if(prefs.viewOnly||!draft.trim())return;const task={id:crypto.randomUUID(),text:draft.trim(),done:false,depth:scope?depth(scope)+1:0};setTasks(t=>{const at=scope?t.findIndex(x=>x.id===scope.id)+1:0;return [...t.slice(0,at),task,...t.slice(at)]},'Note added');setDraft('');input.current?.focus()};
 const paste=e=>{
 if(prefs.viewOnly)return;
 const source=e.clipboardData.getData('text/plain');
@@ -139,20 +158,20 @@ if(!source.includes('\n')&&!source.includes('\r'))return;
 const parsed=parsePaste(source);if(parsed.entries.length<2)return;
 e.preventDefault();
 const imported=parsed.entries.map(t=>({...t,id:crypto.randomUUID()}));
-setTasks(ts=>{const at=scope?ts.findIndex(t=>t.id===scope.id)+1:0;return [...ts.slice(0,at),...imported.map(t=>({...t,depth:depth(t)+(scope?depth(scope)+1:0)})),...ts.slice(at)]});
-if(parsed.hierarchy)update('hierarchy',true);
+setTasks(ts=>{const at=scope?ts.findIndex(t=>t.id===scope.id)+1:0;return [...ts.slice(0,at),...imported.map(t=>({...t,depth:depth(t)+(scope?depth(scope)+1:0)})),...ts.slice(at)]},'Notes pasted');
+// Nesting is always enabled; pasting is one reversible action.
 toast.success('Added '+imported.length+' tasks',{description:'Hint: Tab nests a note under its previous sibling.'});
 };
 const deleteTask=(id,includeChildren=false)=>{
 if(prefs.viewOnly)return;
-const current=tasksRef.current;const record=deletionRecord(current,id,deletedRecords.current,includeChildren);if(!record)return;deletedRecords.current.push(record);
+const current=tasksRef.current;const record=deletionRecord(current,id,[],includeChildren);if(!record)return;
 const currentScope=current.findIndex(t=>t.id===scopeId);
 const index=visibleTasks(currentScope>=0?current.slice(currentScope+1,endOfBranch(current,currentScope)):current).findIndex(t=>t.id===id);
-const next=removePreservingChildren(current,record.branch?record.branch.map(t=>t.id):[id]);tasksRef.current=next;setTasks(next);
+const next=removePreservingChildren(current,record.branch?record.branch.map(t=>t.id):[id]);setTasks(next,record.branch?'Branch deleted':'Note deleted');const action=actionHistory.current.at(-1);
 const scopeAt=next.findIndex(t=>t.id===scopeId);const nextVisible=visibleTasks(scopeAt>=0?next.slice(scopeAt+1,endOfBranch(next,scopeAt)):next);
 if(nextVisible.length)focusTask(nextVisible[Math.min(Math.max(index,0),nextVisible.length-1)].id);else input.current?.focus();
-record.toastId=toast(record.branch?'Note and children removed':'Note removed',{description:'Hint: Ctrl/⌘ + Z restores the note.',duration:2200,
-action:{label:'Undo',onClick:()=>undoRecord(record)},
+toast(record.branch?'Note and children removed':'Note removed',{description:'Hint: undo outside textboxes. The last five app actions are kept.',duration:2200,
+action:{label:'Undo',onClick:()=>undoAction(action)},
 className:'app-toast undo-toast'});
 };
 const scopeIndex=tasks.findIndex(t=>t.id===scopeId);const scope=tasks[scopeIndex];
@@ -161,29 +180,28 @@ const exportTasks=scoped.map(t=>({...t,depth:depth(t)-(scope?depth(scope)+1:0)})
 const remaining=scoped.filter(t=>!t.done).length;
 const visible=visibleTasks(scoped);
 const breadcrumbs=[];let ancestor=scopeIndex;while(ancestor>=0){breadcrumbs.unshift(tasks[ancestor]);ancestor=parentIndex(tasks,ancestor)}
-const openNote=id=>{const index=tasks.findIndex(t=>t.id===id);const parent=parentIndex(tasks,index);navigate(parent>=0?tasks[parent].id:null);if(!prefs.viewOnly)setTasks(ts=>revealTask(ts,id));focusTask(id)};
+const openNote=id=>{const index=tasks.findIndex(t=>t.id===id);const parent=parentIndex(tasks,index);navigate(parent>=0?tasks[parent].id:null,false,true,prefs.viewOnly?null:id);focusTask(id)};
 const shareList=async()=>{const base=scope?depth(scope):0;const list=(scope?tasks.slice(scopeIndex,endOfBranch(tasks,scopeIndex)):tasks).map(t=>({text:t.text,done:t.done,depth:depth(t)-base,collapsed:t.collapsed}));const link=location.origin+location.pathname+location.search+'#share='+encodeURIComponent(JSON.stringify(list));try{await navigator.clipboard.writeText(link);toast.success('Snapshot link copied',{description:'Hint: open a sublist to share just that branch.'})}catch{toast.error('Could not copy link',{description:'Hint: allow clipboard access, then try again.'})}};
 const hasChildren=task=>{const i=tasks.findIndex(t=>t.id===task.id);return i>=0&&endOfBranch(tasks,i)>i+1};
 const openSublist=id=>{const i=tasks.findIndex(t=>t.id===id);if(i<0||!hasChildren(tasks[i]))return;navigate(id);const first=visibleTasks(tasks.slice(i+1,endOfBranch(tasks,i)))[0];if(first)focusTask(first.id)};
-const goBack=()=>{if(!scope)return;const parent=parentIndex(tasks,scopeIndex);navigate(parent>=0?tasks[parent].id:null);setTasks(ts=>revealTask(ts,scope.id));focusTask(scope.id)};
+const goBack=()=>{if(!scope)return;const parent=parentIndex(tasks,scopeIndex);navigate(parent>=0?tasks[parent].id:null,false,true,scope.id);focusTask(scope.id)};
 // Old or direct leaf routes return to the nearest containing list.
-useEffect(()=>{if(!scopeId)return;if(!scope){navigate(null,true);return}if(!hasChildren(scope)){const parent=parentIndex(tasks,scopeIndex);navigate(parent>=0?tasks[parent].id:null,true);focusTask(scope.id)}},[tasks,scopeId]);
+useEffect(()=>{if(!scopeId)return;if(!scope){navigate(null,true,false);return}if(!hasChildren(scope)){const parent=parentIndex(tasks,scopeIndex);navigate(parent>=0?tasks[parent].id:null,true,false);focusTask(scope.id)}},[tasks,scopeId]);
 
 const collapseCurrent=(task,collapsed)=>{
 let index=tasks.findIndex(t=>t.id===task.id);
 if(!hasChildren(task)){index=parentIndex(tasks,index);if(index<0||index===scopeIndex)return}
-const target=tasks[index];setTasks(ts=>ts.map(t=>t.id===target.id?{...t,collapsed}:t));focusTask(target.id);
+const target=tasks[index];setTasks(ts=>ts.map(t=>t.id===target.id&&!!t.collapsed!==collapsed?{...t,collapsed}:t),collapsed?'Branch collapsed':'Branch expanded');focusTask(target.id);
 setNotice(collapsed?'Branch collapsed.':'Branch expanded.');
 };
 const collapseAll=collapsed=>{
 const focused=document.activeElement?.closest('[data-task-id]')?.dataset.taskId;
-const ids=new Set(scoped.map(t=>t.id));const next=setAllCollapsed(tasks,collapsed).map((t,i)=>ids.has(t.id)?t:tasks[i]);setTasks(next);
+const ids=new Set(scoped.map(t=>t.id));const next=setAllCollapsed(tasks,collapsed).map((t,i)=>ids.has(t.id)&&!!t.collapsed!==!!tasks[i].collapsed?t:tasks[i]);setTasks(next,collapsed?'All branches collapsed':'All branches expanded');
 if(focused){let index=tasks.findIndex(t=>t.id===focused);if(collapsed)while(index>=0&&depth(tasks[index])>(scope?depth(scope)+1:0))index=parentIndex(tasks,index);if(index>=0)focusTask(tasks[index].id)}
 setNotice(collapsed?'All branches collapsed.':'All branches expanded.');
 };
 const outlineKey=e=>{
 if(paletteOpen||helpOpen||copyOpen||deleteId||confirmRemove||e.nativeEvent.isComposing)return;
-if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='z'&&deletedRecords.current.length&&!prefs.viewOnly){e.preventDefault();undoRecord(deletedRecords.current.at(-1));return}
 if(!prefs.hierarchy||confirmRemove||e.nativeEvent.isComposing)return;
 if(e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
 if(!e.shiftKey){const id=e.target.closest('[data-task-id]')?.dataset.taskId;const task=tasks.find(t=>t.id===id);if(task){e.preventDefault();collapseCurrent(task,e.key==='ArrowLeft')}}
@@ -211,14 +229,14 @@ if(target)focusTask(target.id);else input.current?.focus();
 return ()=>cancelAnimationFrame(frame);
 },[anyModalOpen]);
 
-const insert=(id,child)=>{if(prefs.viewOnly)return;const task={id:crypto.randomUUID(),text:'',done:false};const next=insertTask(tasks,id,child,task);if(next===tasks){setNotice('Could not insert note.');return}setTasks(revealTask(next,task.id));focusTask(task.id)};
-const changeLevel=(id,direction)=>{if(prefs.viewOnly)return;const next=indentBranch(tasks,id,direction);if(next===tasks){setNotice(direction>0?'Indent needs a previous sibling.':'Already at the top level.');return}setNotice('');setTasks(revealTask(next,id));focusTask(id)};
+const insert=(id,child)=>{if(prefs.viewOnly)return;const task={id:crypto.randomUUID(),text:'',done:false};const next=insertTask(tasks,id,child,task);if(next===tasks){setNotice('Could not insert note.');return}setTasks(revealTask(next,task.id),child?'Child note added':'Note added');focusTask(task.id)};
+const changeLevel=(id,direction)=>{if(prefs.viewOnly)return;const next=indentBranch(tasks,id,direction);if(next===tasks){setNotice(direction>0?'Indent needs a previous sibling.':'Already at the top level.');return}setNotice('');setTasks(revealTask(next,id),'Note nesting changed');focusTask(id)};
 const emptyBackspace=useRef(null);
 const commitDrop=(id,target)=>{
 if(prefsRef.current.viewOnly||!prefsRef.current.experimental.dragging)return;
 const moved=moveBranchTo(tasksRef.current,id,target.targetId,target.position);if(moved===tasksRef.current)return;
-const next=normalizeCompletion(revealTask(moved,id));tasksRef.current=next;setTasks(next);
-if(scopeId){const at=next.findIndex(t=>t.id===id),scopeAt=next.findIndex(t=>t.id===scopeId);if(scopeAt<0||at<=scopeAt||at>=endOfBranch(next,scopeAt)){const parent=parentIndex(next,at);navigate(parent>=0?next[parent].id:null)}}
+const next=normalizeCompletion(revealTask(moved,id));setTasks(next,'Note moved');
+if(scopeId){const at=next.findIndex(t=>t.id===id),scopeAt=next.findIndex(t=>t.id===scopeId);if(scopeAt<0||at<=scopeAt||at>=endOfBranch(next,scopeAt)){const parent=parentIndex(next,at);navigate(parent>=0?next[parent].id:null,false,false)}}
 focusTask(id);setNotice('Note moved with its children.');
 };
 const {drag,start:startDrag}=useOutlineDrag({tasksRef,disabled:!prefs.experimental.dragging||prefs.viewOnly||anyModalOpen,scopeId,onMove:commitDrop,onFocus:focusTask});
@@ -239,14 +257,14 @@ return;
 emptyBackspace.current=null;
 if(e.altKey&&!e.shiftKey&&!mod&&e.key==='Enter'){e.preventDefault();openSublist(task.id);return}
 if(!prefs.viewOnly&&!mod&&!e.altKey&&!e.shiftKey&&e.key==='Delete'){e.preventDefault();setDeleteId(task.id);return}
-if(!prefs.viewOnly&&e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const moved=moveBranch(tasks,task.id,e.key==='ArrowUp'?-1:1);if(moved===tasks){setNotice('Already at the edge of the list.');return}const next=revealTask(moved,task.id);tasksRef.current=next;setTasks(next);setNotice('');if(scopeId){const at=next.findIndex(t=>t.id===task.id),scopeAt=next.findIndex(t=>t.id===scopeId);if(scopeAt<0||at<=scopeAt||at>=endOfBranch(next,scopeAt)){const parent=parentIndex(next,at);navigate(parent>=0?next[parent].id:null)}}focusTask(task.id);return}
+if(!prefs.viewOnly&&e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const moved=moveBranch(tasks,task.id,e.key==='ArrowUp'?-1:1);if(moved===tasks){setNotice('Already at the edge of the list.');return}const next=revealTask(moved,task.id);setTasks(next,'Note moved');setNotice('');if(scopeId){const at=next.findIndex(t=>t.id===task.id),scopeAt=next.findIndex(t=>t.id===scopeId);if(scopeAt<0||at<=scopeAt||at>=endOfBranch(next,scopeAt)){const parent=parentIndex(next,at);navigate(parent>=0?next[parent].id:null,false,false)}}focusTask(task.id);return}
 const index=visible.findIndex(t=>t.id===task.id);
 if(e.key==='Escape'){e.preventDefault();e.target.blur();input.current?.focus();return}
 if(!prefs.viewOnly&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(prefs.hierarchy)insert(task.id,e.ctrlKey||e.metaKey);else e.target.blur();return}
 if(!prefs.hierarchy)return;
 if(!prefs.viewOnly&&e.key==='Tab'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();changeLevel(task.id,e.shiftKey?-1:1);return}
 if(['ArrowUp','ArrowDown'].includes(e.key)&&!mod&&!e.shiftKey&&!e.altKey&&atTextEdge(e.target,e.key)){const next=visible[index+(e.key==='ArrowUp'?-1:1)];e.preventDefault();if(next)focusTask(next.id);else input.current?.focus()}
-if(!prefs.viewOnly&&mod&&!e.altKey&&!e.shiftKey&&e.key===' '){e.preventDefault();setTasks(ts=>toggleCompletion(ts,task.id))}
+if(!prefs.viewOnly&&mod&&!e.altKey&&!e.shiftKey&&e.key===' '){e.preventDefault();setTasks(ts=>toggleCompletion(ts,task.id),'Completion changed')}
 };
 const currentTask=visible.find(t=>t.id===selectedTask.current);
 const commands=[
@@ -257,7 +275,7 @@ const commands=[
 {id:'back',group:'Navigation',label:'Back to containing list',shortcut:'Alt + Backspace',disabled:!scope,run:goBack},
 {id:'first',group:'Tasks',label:'Focus first visible task',disabled:!visible.length,run:()=>focusTask(visible[0].id)},
 {id:'copy',group:'Tasks',label:'Copy current list as Markdown',disabled:!tasks.length,run:copyMarkdown},
-{id:'undo',group:'Tasks',label:'Undo latest deletion',shortcut:'Ctrl/⌘ + Z',run:()=>{const r=deletedRecords.current.at(-1);if(r)undoRecord(r);else toast('No deletion available to undo',{description:'Hint: Delete opens note deletion confirmation.'})}},
+{id:'undo',group:'Interface',label:'Undo latest app action',shortcut:'Ctrl/⌘ + Z',keywords:'reverse last five actions history',run:()=>undoAction()},
 {id:'clear',group:'Tasks',label:'Clear completed tasks…',shortcut:'Alt + Shift + C',disabled:!tasks.some(t=>t.done),run:()=>requestBulkDelete('completed')},
 {id:'remove',group:'Tasks',label:'Remove all tasks…',shortcut:'Alt + Shift + D',disabled:!tasks.length,run:()=>requestBulkDelete('all')},
 {id:'delete-note',group:'Current task',label:'Delete selected note…',keywords:'remove task',shortcut:'Delete',disabled:!currentTask,run:()=>setDeleteId(currentTask.id)},
@@ -268,32 +286,32 @@ const commands=[
 {id:'outdent',group:'Current task',label:'Outdent selected task',disabled:!prefs.hierarchy||!currentTask||!depth(currentTask),run:()=>changeLevel(currentTask.id,-1)},
 {id:'fold',group:'Current task',label:'Collapse selected branch',disabled:!prefs.hierarchy||!currentTask,run:()=>collapseCurrent(currentTask,true)},
 {id:'unfold',group:'Current task',label:'Expand selected branch',disabled:!prefs.hierarchy||!currentTask,run:()=>collapseCurrent(currentTask,false)},
-{id:'complete',group:'Current task',label:'Toggle selected task completion',shortcut:'Ctrl/⌘ + Space',disabled:!currentTask,run:()=>setTasks(ts=>toggleCompletion(ts,currentTask.id))},
+{id:'complete',group:'Current task',label:'Toggle selected task completion',shortcut:'Ctrl/⌘ + Space',disabled:!currentTask,run:()=>setTasks(ts=>toggleCompletion(ts,currentTask.id),'Completion changed')},
 ...['Excalifont','Space Mono','Poppins'].map(font=>({id:'font-'+font,group:'Fonts',keywords:'select selection choose typography',label:'Font: '+font,selected:prefs.font===font,run:()=>update('font',font)})),
 ...['small','medium','large'].map(size=>({id:'size-'+size,group:'Font size',keywords:'select selection choose text',label:'Font size: '+size,selected:prefs.size===size,run:()=>update('size',size)})),
 ...[{id:'system',label:'System'},...THEMES].map(t=>({id:'theme-'+t.id,group:'Themes',keywords:'select selection choose color appearance',label:'Theme: '+t.label,selected:prefs.theme===t.id,run:()=>update('theme',t.id)})),
 {id:'feedback',group:'Interface',label:'Send feedback · opens a new tab',keywords:'bug report suggestion roadmap feature request',run:()=>window.open('https://gottodo.quackback.io/','_blank','noopener,noreferrer')},
 {id:'help',group:'Interface',label:'Open keyboard shortcuts',keywords:'help information guide modal',shortcut:'Ctrl/⌘ + /',run:()=>setHelpOpen(true)},
 {id:'bar',group:'Interface',label:prefs.hidden?'Show settings bar':'Hide settings bar',run:()=>update('hidden',!prefs.hidden)}
-].map(c=>({...c,disabled:c.disabled||(prefs.viewOnly&&['undo','clear','remove','delete-note','child','indent','outdent','complete'].includes(c.id))})).concat(tasks.map(t=>({id:'note-'+t.id,group:'Notes',label:t.text||'Untitled note',keywords:'find note',run:()=>openNote(t.id)})));
+].map(c=>({...c,disabled:c.disabled||(prefs.viewOnly&&['clear','remove','delete-note','child','indent','outdent','complete'].includes(c.id))})).concat(tasks.map(t=>({id:'note-'+t.id,group:'Notes',label:t.text||'Untitled note',keywords:'find note',run:()=>openNote(t.id)})));
 shortcutCommands.current={'shift+c':commands.find(c=>c.id==='clear'),'shift+d':commands.find(c=>c.id==='remove'),'shift+arrowleft':commands.find(c=>c.id==='collapse'),'shift+arrowright':commands.find(c=>c.id==='expand'),enter:{run:()=>openSublist(selectedTask.current)},backspace:commands.find(c=>c.id==='back')};
 return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOut'}}><div className={"app"+(prefs.viewOnly?" view-only":"")+(drag?" is-dragging":"")} onKeyDown={outlineKey} onFocusCapture={e=>{const id=e.target.closest('[data-task-id]')?.dataset.taskId;if(id)selectedTask.current=id}} style={{'--list-font':`"${prefs.font}"`,'--list-size':{small:'18px',medium:'22px',large:'28px'}[prefs.size]}}>
 {!prefs.hidden&&<header className="toolbar"><div className="bar">
 <a className="brand" href={sharedSnapshot?'#/shared':'#/'} onClick={e=>{e.preventDefault();navigate(null)}} aria-label="Gottado home"><span className="brand-icon"><Icon name="check"/></span><span>gottado</span></a>
-<div className="settings"><div className="header-preferences"><SelectBox label="Font" value={prefs.font} onChange={v=>update('font',v)} preview options={['Excalifont','Space Mono','Poppins'].map(v=>({value:v,label:v}))}/><span className="divider"/><SelectBox label="Size" value={prefs.size} onChange={v=>update('size',v)} options={[{value:'small',label:'Small'},{value:'medium',label:'Medium'},{value:'large',label:'Large'}]}/><span className="divider"/><SelectBox label="Theme" onPreview={setPreviewTheme} value={prefs.theme} onChange={v=>update('theme',v)} options={[{value:'system',label:'System'},...THEMES.map(t=>({value:t.id,label:t.label}))]}/><span className="divider"/><ExperimentalFeatures enabled={prefs.experimental} onChange={(id,value)=>setPrefs(p=>({...p,experimental:{...p.experimental,[id]:value}}))}/></div><div className="toolbar-actions"><ToolButton className="icon-button" aria-label={prefs.viewOnly?'Edit list':'View only'} aria-pressed={prefs.viewOnly} tip={prefs.viewOnly?'Edit list':'View only'} icon={prefs.viewOnly?'edit':'eye'} onClick={()=>update('viewOnly',!prefs.viewOnly)}/><ToolButton className="icon-button" aria-label="Search notes and actions" tip="Find notes & actions" shortcut="Ctrl/⌘ + Shift + P" icon="search" onClick={()=>setPaletteOpen(true)}/><ToolButton ref={copyButton} className="icon-button" aria-label="Copy Markdown" tip={copied?'Copied':'Copy Markdown'} icon={copied?'check':'copy'} disabled={!tasks.length} onClick={copyMarkdown}/><a className="icon-button" href="https://gottodo.quackback.io/" target="_blank" rel="noopener noreferrer" aria-label="Send feedback (opens a new tab)" title="Send feedback (opens a new tab)"><Icon name="feedback"/></a><ToolButton ref={helpButton} className="icon-button" aria-label="Keyboard shortcuts" tip="Keyboard shortcuts" shortcut="Ctrl/⌘ + /" icon="info" onClick={()=>setHelpOpen(true)}/><ToolButton className="icon-button" aria-label="Hide settings bar" tip="Hide settings bar" icon="hide" onClick={()=>update('hidden',true)}/></div></div>
+<div className="settings"><div className="header-preferences"><SelectBox label="Font" value={prefs.font} onChange={v=>update('font',v)} preview options={['Excalifont','Space Mono','Poppins'].map(v=>({value:v,label:v}))}/><span className="divider"/><SelectBox label="Size" value={prefs.size} onChange={v=>update('size',v)} options={[{value:'small',label:'Small'},{value:'medium',label:'Medium'},{value:'large',label:'Large'}]}/><span className="divider"/><SelectBox label="Theme" onPreview={setPreviewTheme} value={prefs.theme} onChange={v=>update('theme',v)} options={[{value:'system',label:'System'},...THEMES.map(t=>({value:t.id,label:t.label}))]}/><span className="divider"/><ExperimentalFeatures enabled={prefs.experimental} onChange={(id,value)=>setPrefs(p=>({...p,experimental:{...p.experimental,[id]:value}}),'Experimental features changed')}/></div><div className="toolbar-actions"><ToolButton className="icon-button" aria-label={prefs.viewOnly?'Edit list':'View only'} aria-pressed={prefs.viewOnly} tip={prefs.viewOnly?'Edit list':'View only'} icon={prefs.viewOnly?'edit':'eye'} onClick={()=>update('viewOnly',!prefs.viewOnly)}/><ToolButton className="icon-button" aria-label="Search notes and actions" tip="Find notes & actions" shortcut="Ctrl/⌘ + Shift + P" icon="search" onClick={()=>setPaletteOpen(true)}/><ToolButton ref={copyButton} className="icon-button" aria-label="Copy Markdown" tip={copied?'Copied':'Copy Markdown'} icon={copied?'check':'copy'} disabled={!tasks.length} onClick={copyMarkdown}/><a className="icon-button" href="https://gottodo.quackback.io/" target="_blank" rel="noopener noreferrer" aria-label="Send feedback (opens a new tab)" title="Send feedback (opens a new tab)"><Icon name="feedback"/></a><ToolButton ref={helpButton} className="icon-button" aria-label="Keyboard shortcuts" tip="Keyboard shortcuts" shortcut="Ctrl/⌘ + /" icon="info" onClick={()=>setHelpOpen(true)}/><ToolButton className="icon-button" aria-label="Hide settings bar" tip="Hide settings bar" icon="hide" onClick={()=>update('hidden',true)}/></div></div>
 </div></header>}
 {prefs.hidden&&<ToolButton className="show-bar icon-button" aria-label="Show settings bar" tip="Show settings bar" icon="show" onClick={()=>update('hidden',false)}/>}
 <main>{sharedSnapshot&&<p className="snapshot-notice">Shared snapshot · your saved list is kept separately. Edits to this snapshot stay in this tab’s session.</p>}<nav className="breadcrumbs" aria-label="List breadcrumbs"><button data-drop-parent="" className={isListDrop(null)?"drop-list-active":undefined} onClick={()=>navigate(null)}>Home</button>{breadcrumbs.map(t=><React.Fragment key={t.id}><span>/</span><button data-drop-parent={t.id} className={isListDrop(t.id)?"drop-list-active":undefined} aria-current={t.id===scopeId?'page':undefined} onClick={()=>navigate(t.id)}>{t.text||'Untitled note'}</button></React.Fragment>)}</nav>{scope&&<ToolButton className="back-button" tip="Back" shortcut="Alt + Backspace" onClick={goBack}>← Back</ToolButton>}<div className="heading"><div className="title-row"><h1>{scope?scope.text:'Gotta do.'}</h1><ToolButton className="share-button icon-button" icon="share" aria-label={scope?'Share sublist':'Share list'} tip={scope?'Share sublist':'Share list'} disabled={!tasks.length} onClick={shareList}/></div><span className="count">{tasks.length? `${remaining} left`:'Fight procrastination by listing your troubles away.'}</span></div>
 {!prefs.viewOnly&&<form onSubmit={add} className="add-form"><span className="add-symbol"><Icon name="plus"/></span><TaskText inputRef={input} aria-label="New task" onPaste={paste} placeholder="What needs doing?" value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.nativeEvent.isComposing)return;if(e.key==='Enter'&&!e.shiftKey){add(e);return}if(['ArrowUp','ArrowDown'].includes(e.key)&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&atTextEdge(e.target,e.key)&&visible.length){e.preventDefault();focusTask(e.key==='ArrowDown'?visible[0].id:visible.at(-1).id)}}} maxLength={500}/><button type="submit" className="add-button" disabled={!draft.trim()} aria-label="Add task">Add <span>↵</span></button></form>}
 <p className="sr-only" role="status">{notice}</p>
-<ul key={scopeId||'home'} className="task-list"><AnimatePresence initial={false}>{visible.map(task=><motion.li layout={!drag} data-task-id={task.id} key={task.id} initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,x:-12,height:0,margin:0}} style={{marginLeft:Math.min(12,depth(task)-(scope?depth(scope)+1:0))*28}} className={'task'+(task.done?' done':'')+(draggedIds.has(task.id)?' dragging-note':'')+(drag?.target?.markerId===task.id?' drop-'+drag.target.position:'')}>{prefs.experimental.dragging&&!prefs.viewOnly&&<button className="drag-handle" aria-label={`Drag note: ${task.text||'Untitled note'}`} title="Drag to move; Alt + ↑ / ↓ also moves" onPointerDown={e=>startDrag(e,task.id)} onKeyDown={e=>{if(e.altKey&&['ArrowUp','ArrowDown'].includes(e.key))taskKey(e,task)}}><svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">{[5,10,15].map(y=><React.Fragment key={y}><circle cx="5" cy={y} r="1.4"/><circle cx="11" cy={y} r="1.4"/></React.Fragment>)}</svg></button>}{prefs.hierarchy&&(hasChildren(task)?<ToolButton className="branch-toggle" aria-expanded={!task.collapsed} aria-label={`${task.collapsed?'Expand':'Collapse'}: ${task.text}`} tip={task.collapsed?'Expand branch':'Collapse branch'} shortcut={task.collapsed?'Alt + →':'Alt + ←'} onClick={()=>collapseCurrent(task,!task.collapsed)}><svg width="12" height="12" viewBox="0 0 16 16" style={{transform:task.collapsed?'rotate(-90deg)':'rotate(0deg)'}}><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg></ToolButton>:<span className="branch-spacer"/>)}{!prefs.viewOnly&&<button className="checkbox" aria-label={`${task.done?'Mark incomplete':'Complete'}: ${task.text}`} aria-pressed={task.done} onClick={()=>setTasks(ts=>toggleCompletion(ts,task.id))}>{task.done&&<motion.span initial={{scale:.5}} animate={{scale:1}}><Icon name="check"/></motion.span>}</button>}<TaskText id={"task-"+task.id} font={prefs.font} size={prefs.size} readOnly={prefs.viewOnly} className={'task-text'+(flashId===task.id?' copy-flash':'')} aria-label={prefs.hierarchy? `Edit task, level ${depth(task)+1}`:"Edit task"} value={task.text} placeholder="Untitled note" onFocus={e=>{emptyBackspace.current=null;const el=e.currentTarget;el.setSelectionRange(el.value.length,el.value.length)}} onChange={e=>{emptyBackspace.current=null;setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text:e.target.value}:t))}} onBlur={()=>{emptyBackspace.current=null;if(!prefs.viewOnly)setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text:t.text.trim()}:t))}} onCopy={e=>{if(e.target.selectionStart!==e.target.selectionEnd)return;e.preventDefault();e.clipboardData.setData('text/plain',task.text);setFlashId(task.id);setTimeout(()=>setFlashId(null),600);toast.success('Note copied',{description:'Hint: use Copy Markdown for the whole list.'})}} onKeyDown={e=>taskKey(e,task)} maxLength={500}/>{prefs.hierarchy&&task.collapsed&&hasChildren(task)&&<button className="hidden-count" data-tooltip="Expand branch" onClick={()=>collapseCurrent(task,false)}>{endOfBranch(tasks,tasks.findIndex(t=>t.id===task.id))-tasks.findIndex(t=>t.id===task.id)-1} hidden</button>}<div className="row-tools">{hasChildren(task)&&<ToolButton tip="Open sublist" shortcut="Alt + Enter" aria-label={`Open sublist: ${task.text}`} icon="sublist" onClick={()=>openSublist(task.id)}/>}{!prefs.viewOnly&&prefs.hierarchy&&<div className="outline-actions"><ToolButton icon="outdent" tip="Outdent task" shortcut="Shift + Tab" aria-label="Outdent task" disabled={depth(task)===0} onClick={()=>changeLevel(task.id,-1)}/><ToolButton icon="indent" tip="Indent task" shortcut="Tab" aria-label="Indent task" disabled={indentBranch(tasks,task.id,1)===tasks} onClick={()=>changeLevel(task.id,1)}/></div>}{!prefs.viewOnly&&<ToolButton className="delete" icon="trash" tip="Delete note" shortcut="Delete" aria-label={`Delete note: ${task.text}`} onClick={()=>setDeleteId(task.id)}/>}</div>{!prefs.viewOnly&&<InsertBetween task={task} onInsert={insert}/>}</motion.li>)}</AnimatePresence></ul>
+<ul key={scopeId||'home'} className="task-list"><AnimatePresence initial={false}>{visible.map(task=><motion.li layout={!drag} data-task-id={task.id} key={task.id} initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,x:-12,height:0,margin:0}} style={{marginLeft:Math.min(12,depth(task)-(scope?depth(scope)+1:0))*28}} className={'task'+(task.done?' done':'')+(draggedIds.has(task.id)?' dragging-note':'')+(drag?.target?.markerId===task.id?' drop-'+drag.target.position:'')}>{prefs.experimental.dragging&&!prefs.viewOnly&&<button className="drag-handle" aria-label={`Drag note: ${task.text||'Untitled note'}`} title="Drag to move; Alt + ↑ / ↓ also moves" onPointerDown={e=>startDrag(e,task.id)} onKeyDown={e=>{if(e.altKey&&['ArrowUp','ArrowDown'].includes(e.key))taskKey(e,task)}}><svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">{[5,10,15].map(y=><React.Fragment key={y}><circle cx="5" cy={y} r="1.4"/><circle cx="11" cy={y} r="1.4"/></React.Fragment>)}</svg></button>}{prefs.hierarchy&&(hasChildren(task)?<ToolButton className="branch-toggle" aria-expanded={!task.collapsed} aria-label={`${task.collapsed?'Expand':'Collapse'}: ${task.text}`} tip={task.collapsed?'Expand branch':'Collapse branch'} shortcut={task.collapsed?'Alt + →':'Alt + ←'} onClick={()=>collapseCurrent(task,!task.collapsed)}><svg width="12" height="12" viewBox="0 0 16 16" style={{transform:task.collapsed?'rotate(-90deg)':'rotate(0deg)'}}><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg></ToolButton>:<span className="branch-spacer"/>)}{!prefs.viewOnly&&<button className="checkbox" aria-label={`${task.done?'Mark incomplete':'Complete'}: ${task.text}`} aria-pressed={task.done} onClick={()=>setTasks(ts=>toggleCompletion(ts,task.id),'Completion changed')}>{task.done&&<motion.span initial={{scale:.5}} animate={{scale:1}}><Icon name="check"/></motion.span>}</button>}<TaskText id={"task-"+task.id} font={prefs.font} size={prefs.size} readOnly={prefs.viewOnly} className={'task-text'+(flashId===task.id?' copy-flash':'')} aria-label={prefs.hierarchy? `Edit task, level ${depth(task)+1}`:"Edit task"} value={task.text} placeholder="Untitled note" onFocus={e=>{emptyBackspace.current=null;const el=e.currentTarget;el.setSelectionRange(el.value.length,el.value.length)}} onChange={e=>{emptyBackspace.current=null;setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text:e.target.value}:t),'',false)}} onBlur={()=>{emptyBackspace.current=null}} onCopy={e=>{if(e.target.selectionStart!==e.target.selectionEnd)return;e.preventDefault();e.clipboardData.setData('text/plain',task.text);setFlashId(task.id);setTimeout(()=>setFlashId(null),600);toast.success('Note copied',{description:'Hint: use Copy Markdown for the whole list.'})}} onKeyDown={e=>taskKey(e,task)} maxLength={500}/>{prefs.hierarchy&&task.collapsed&&hasChildren(task)&&<button className="hidden-count" data-tooltip="Expand branch" onClick={()=>collapseCurrent(task,false)}>{endOfBranch(tasks,tasks.findIndex(t=>t.id===task.id))-tasks.findIndex(t=>t.id===task.id)-1} hidden</button>}<div className="row-tools">{hasChildren(task)&&<ToolButton tip="Open sublist" shortcut="Alt + Enter" aria-label={`Open sublist: ${task.text}`} icon="sublist" onClick={()=>openSublist(task.id)}/>}{!prefs.viewOnly&&prefs.hierarchy&&<div className="outline-actions"><ToolButton icon="outdent" tip="Outdent task" shortcut="Shift + Tab" aria-label="Outdent task" disabled={depth(task)===0} onClick={()=>changeLevel(task.id,-1)}/><ToolButton icon="indent" tip="Indent task" shortcut="Tab" aria-label="Indent task" disabled={indentBranch(tasks,task.id,1)===tasks} onClick={()=>changeLevel(task.id,1)}/></div>}{!prefs.viewOnly&&<ToolButton className="delete" icon="trash" tip="Delete note" shortcut="Delete" aria-label={`Delete note: ${task.text}`} onClick={()=>setDeleteId(task.id)}/>}</div>{!prefs.viewOnly&&<InsertBetween task={task} onInsert={insert}/>}</motion.li>)}</AnimatePresence></ul>
 {drag&&<div className={'list-drop-zone'+(isListDrop(scopeId)?' drop-list-active':'')} data-drop-parent={scopeId||''}>Move to this list</div>}
 {drag&&<p className="drag-hint" role="status">{dropHint}</p>}
 {scoped.length===0&&<motion.div className="empty" initial={{opacity:0}} animate={{opacity:1}}><div className="empty-check"><Icon name="check" width="24" height="24"/></div><p>Nothing on your list. Yet.</p></motion.div>}
 </main>
-<dialog ref={deleteDialog} className="confirm-dialog" onCancel={()=>setDeleteId(null)} onClick={e=>{if(outsideDialog(e))setDeleteId(null)}} onClose={()=>setDeleteId(null)} aria-labelledby="delete-note-title"><h2 id="delete-note-title">Delete this note?</h2><p>You can undo this deletion with Ctrl/⌘ + Z.</p>{tasks.some(t=>t.id===deleteId&&hasChildren(t))&&<label className="delete-children-option"><input type="checkbox" checked={deleteChildren} onChange={e=>setDeleteChildren(e.target.checked)}/>Delete all children too</label>}<div className="modal-actions"><button onClick={()=>setDeleteId(null)}>Cancel</button><button ref={deleteConfirm} className="confirm-remove" onClick={()=>{deleteTask(deleteId,deleteChildren);setDeleteId(null)}}>Delete note</button></div></dialog>
+<dialog ref={deleteDialog} className="confirm-dialog" onCancel={()=>setDeleteId(null)} onClick={e=>{if(outsideDialog(e))setDeleteId(null)}} onClose={()=>setDeleteId(null)} aria-labelledby="delete-note-title"><h2 id="delete-note-title">Delete this note?</h2><p>Undo with Ctrl/⌘ + Z outside textboxes, within your last five app actions.</p>{tasks.some(t=>t.id===deleteId&&hasChildren(t))&&<label className="delete-children-option"><input type="checkbox" checked={deleteChildren} onChange={e=>setDeleteChildren(e.target.checked)}/>Delete all children too</label>}<div className="modal-actions"><button onClick={()=>setDeleteId(null)}>Cancel</button><button ref={deleteConfirm} className="confirm-remove" onClick={()=>{deleteTask(deleteId,deleteChildren);setDeleteId(null)}}>Delete note</button></div></dialog>
 <dialog ref={dialog} className="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description" onCancel={()=>setConfirmRemove(false)} onClose={()=>setConfirmRemove(false)} onClick={e=>{if(outsideDialog(e))setConfirmRemove(false)}}>
-{confirmRemove&&<><h2 id="confirm-title">{confirmRemove==='completed'?'Clear completed tasks?':'Remove all tasks?'}</h2><p id="confirm-description">{confirmRemove==='completed'?`${tasks.filter(t=>t.done).length} completed tasks will be removed. Their unfinished children will be kept.`:`All ${tasks.length} tasks will be removed from this browser.`} This cannot be undone.</p><div className="modal-actions"><button onClick={()=>setConfirmRemove(false)}>Cancel</button><button ref={bulkConfirm} className="confirm-remove" onClick={()=>{if(prefs.viewOnly)return;if(confirmRemove==='completed')setTasks(ts=>removePreservingChildren(ts,ts.filter(t=>t.done).map(t=>t.id)));else{toast.dismiss();deletedRecords.current=[];setTasks([])}setConfirmRemove(false)}}>{confirmRemove==='completed'?'Clear completed':'Remove all tasks'}</button></div></>}
+{confirmRemove&&<><h2 id="confirm-title">{confirmRemove==='completed'?'Clear completed tasks?':'Remove all tasks?'}</h2><p id="confirm-description">{confirmRemove==='completed'?`${tasks.filter(t=>t.done).length} completed tasks will be removed. Their unfinished children will be kept.`:`All ${tasks.length} tasks will be removed from this browser.`} You can undo this within your last five app actions.</p><div className="modal-actions"><button onClick={()=>setConfirmRemove(false)}>Cancel</button><button ref={bulkConfirm} className="confirm-remove" onClick={()=>{if(prefs.viewOnly)return;if(confirmRemove==='completed')setTasks(ts=>removePreservingChildren(ts,ts.filter(t=>t.done).map(t=>t.id)),'Completed notes cleared');else{toast.dismiss();setTasks([],'All notes removed')}setConfirmRemove(false)}}>{confirmRemove==='completed'?'Clear completed':'Remove all tasks'}</button></div></>}
 
 </dialog>
 <dialog ref={helpDialog} className="help-dialog confirm-dialog" aria-labelledby="help-title" onCancel={()=>setHelpOpen(false)} onClose={()=>setHelpOpen(false)} onClick={e=>{if(outsideDialog(e))setHelpOpen(false)}}>
@@ -335,8 +353,8 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 ['Clear completed tasks',['Alt','Shift','C']],
 ['Remove all tasks',['Alt','Shift','D']],
 ['Confirm deletion',['Enter']],
-['Undo the latest available deletion',['Ctrl / ⌘','Z']],
-]} note="Click a note’s trash icon, press Delete while a note is focused, or find “Delete selected note” in Find notes and actions, then Enter to confirm. Clear completed and Remove all also ask for confirmation and cannot be undone. Individual note deletions can be undone during this session. Multiple deletions undo newest first. If none is available, Ctrl/⌘ + Z keeps its normal text-editing behavior. Parent deletion keeps children by default. Check “Delete all children too” to delete the whole branch. Undo restores the deleted note or whole branch."/>
+['Undo latest app action (outside textboxes)',['Ctrl / ⌘','Z']],
+]} note="Click a note’s trash icon, press Delete while a note is focused, or find “Delete selected note” in Find notes and actions, then Enter to confirm. Clear completed and Remove all also ask for confirmation. Outside textboxes, Ctrl/⌘ + Z reverses the last five app actions, newest first, including completion, insertion, moving, deletion, folding, navigation, and settings. Inside textboxes it always uses native text undo. Find notes and actions also offers Undo latest app action. Older actions are discarded, and empty history shows a message. Parent deletion keeps children by default. Check “Delete all children too” to delete the whole branch. Undo restores the deleted note or whole branch without discarding later text edits to surviving notes."/>
 <ShortcutGroup title="Settings menus" rows={[
 ['Move between options',['↑ / ↓']],
 ['First / last option',['Home / End']],
