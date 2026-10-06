@@ -22,7 +22,8 @@
 
 ## Implemented
 
-- [x] Drag notes using dedicated handles to reorder, nest under another note, or move into a breadcrumb list. Descendants stay attached, self/descendant drops are blocked, edge scrolling is supported, and Escape cancels before any change.
+- [x] Header Experimental dropdown lists feature names with toggles. Every experiment defaults off; explicit choices are remembered locally. Dragging notes is the first experiment, with handles hidden and pointer reordering disabled until enabled. View-only still prevents dragging.
+- [x] With experimental dragging enabled, use dedicated handles to reorder, nest under another note, or move into a breadcrumb list. Descendants stay attached, self/descendant drops are blocked, edge scrolling is supported, and Escape cancels before any change.
 - [x] Between-note plus opens New note and Child note choices, replacing the trailing child-add icon. Only the plus is clickable; touch devices always show it.
 - [x] Two separate Backspace presses within 800 ms delete an empty note without confirmation. Children are preserved, held keys cannot trigger deletion, and undo remains available.
 - [x] Copied Markdown uses plain nested bullets without completion brackets.

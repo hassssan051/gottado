@@ -7,6 +7,11 @@ const {moveBranch,moveBranchTo,indentBranch,insertTask,removePreservingChildren,
 const {restoreDeleted,deletionRecord}=await import('data:text/javascript;base64,'+Buffer.from(readFileSync(new URL('./undo.js',import.meta.url),'utf8').replace("'./outline.js'",JSON.stringify(outlineURL))).toString('base64'));
 const {parsePaste}=await import(moduleURL('./paste.js'));
 const {toMarkdown}=await import(moduleURL('./markdown.js'));
+const {EXPERIMENTAL_FEATURES,resolveExperiments}=await import(moduleURL('./experimental.js'));
+assert.ok(EXPERIMENTAL_FEATURES.every(feature=>resolveExperiments()[feature.id]===false),'Every experimental feature starts off');
+assert.deepEqual(resolveExperiments({dragging:true,unknown:true}),{dragging:true},'Explicit opt-in persists; unknown flags are ignored');
+assert.equal(resolveExperiments({dragging:'true'}).dragging,false,'Only an explicit boolean enables an experiment');
+assert.equal(resolveExperiments(null).dragging,false,'Older preferences keep dragging disabled');
 const {searchCommands}=await import(moduleURL('./themes.js'));
 const task=(id,depth=0)=>({id,text:id,depth,done:false});
 const tasks=[task('parent'),task('a',1),task('grandchild',2),task('b',1),task('other')];

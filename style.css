@@ -105,6 +105,15 @@ main{width:100%;margin:0;padding:24px 48px 80px}
 /* A normal-size sticky header, with no scroll or hover sizing effects. */
 .toolbar{position:sticky;top:0;z-index:20;background:var(--bg)}
 .header-preferences{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:16px;min-width:0}
+.experimental-features{position:relative}
+.experimental-trigger{white-space:nowrap}
+.experimental-panel{position:absolute;right:0;top:calc(100% + 8px);width:min(270px,calc(100vw - 32px));padding:14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 30px #0003;z-index:10}
+.experimental-panel h3{margin:0 0 14px;font-size:13px;font-weight:500;color:var(--muted)}
+.experimental-option{display:flex;align-items:center;justify-content:space-between;gap:20px;font-size:14px}
+.experimental-toggle{width:36px;height:21px;flex:none;padding:2px;border:1px solid var(--muted);border-radius:12px;background:var(--soft)}
+.experimental-toggle span{display:block;width:15px;height:15px;border-radius:50%;background:var(--muted)}
+.experimental-toggle[aria-checked=true]{border-color:var(--accent);background:var(--accent)}
+.experimental-toggle[aria-checked=true] span{margin-left:15px;background:var(--bg)}
 .toolbar .settings{flex-wrap:nowrap;min-width:0}
 .show-bar{position:fixed;z-index:21;background:var(--bg)}
 @media(max-width:900px){.header-preferences{gap:10px}}

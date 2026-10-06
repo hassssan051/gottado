@@ -20,7 +20,7 @@ Production build: `npm run build`. Preview: `npm run preview`.
 
 ## Organizing notes
 
-Drag a note's handle above or below another note to reorder it, or onto its center to make it a child. Children move with their parent. Drop onto Home or a breadcrumb to move into that list; Escape cancels. Alt+Up/Down also moves notes between levels.
+Experimental features are opt-in through the header dropdown and start switched off. Enable Dragging notes to show drag handles; your choice is remembered locally. Drag a note's handle above or below another note to reorder it, or onto its center to make it a child. Children move with their parent. Drop onto Home or a breadcrumb to move into that list; Escape cancels. Alt+Up/Down also moves notes between levels without enabling the experiment.
 
 The plus between notes offers New note and Child note. Enter adds a sibling while editing; Ctrl/⌘+Enter adds a child. Press Backspace twice within 800 ms on an empty note to remove it without confirmation, preserving its children. Ctrl/⌘+Z undoes deletion. Copy Markdown exports plain nested bullets without completion brackets.
 
