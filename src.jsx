@@ -311,7 +311,7 @@ const commands=[
 {id:'outdent',group:'Current task',label:'Outdent selected task',disabled:!prefs.hierarchy||!currentTask||!depth(currentTask),run:()=>changeLevel(currentTask.id,-1)},
 {id:'fold',group:'Current task',label:'Collapse selected branch',disabled:!prefs.hierarchy||!currentTask,run:()=>collapseCurrent(currentTask,true)},
 {id:'unfold',group:'Current task',label:'Expand selected branch',disabled:!prefs.hierarchy||!currentTask,run:()=>collapseCurrent(currentTask,false)},
-{id:'complete',group:'Current task',label:'Toggle selected task completion',shortcut:'Ctrl/⌘ + Space',disabled:!currentTask,run:()=>setTasks(ts=>toggleCompletion(ts,currentTask.id),'Completion changed')},
+{id:'complete',group:'Current task',label:currentTask?.done?'Mark focused note incomplete':'Mark focused note complete',keywords:'toggle completion completed mark check uncheck finish finished done checkbox task current selected',shortcut:'Ctrl/⌘ + Space',disabled:!currentTask,run:()=>setTasks(ts=>toggleCompletion(ts,currentTask.id),'Completion changed')},
 ...['Excalifont','Space Mono','Poppins'].map(font=>({id:'font-'+font,group:'Fonts',keywords:'select selection choose typography',label:'Font: '+font,selected:prefs.font===font,run:()=>update('font',font)})),
 ...['small','medium','large'].map(size=>({id:'size-'+size,group:'Font size',keywords:'select selection choose text',label:'Font size: '+size,selected:prefs.size===size,run:()=>update('size',size)})),
 ...[{id:'system',label:'System'},...THEMES].map(t=>({id:'theme-'+t.id,group:'Themes',keywords:'select selection choose color appearance',label:'Theme: '+t.label,selected:prefs.theme===t.id,run:()=>update('theme',t.id)})),
@@ -362,7 +362,7 @@ return <MotionConfig reducedMotion="user" transition={{duration:.16,ease:'easeOu
 ['Open focused note’s sublist',['Alt','Enter']],
 ['Back to containing list',['Alt','Backspace']],
 ['Move note or selected notes through sublists',['Alt','↑ / ↓']],
-['Toggle completion',['Ctrl / ⌘','Space']],
+['Mark focused note complete / incomplete',['Ctrl / ⌘','Space']],
 ['Finish editing / leave the list',['Esc']],
 ]} note="Checking a parent checks every descendant; unchecking it unchecks them all. Parents complete when all children are complete. Unchecking a child unchecks its ancestors. Alt + Enter opens a sublist; Alt + Backspace returns. Sublist navigation works in view-only mode."/>
 <ShortcutGroup title="Select & move notes" rows={[
