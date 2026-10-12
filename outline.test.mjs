@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 // The app's .js modules are ESM although the existing package is CommonJS.
 const moduleURL=name=>'data:text/javascript;base64,'+Buffer.from(readFileSync(new URL(name,import.meta.url),'utf8')).toString('base64');
 const outlineURL=moduleURL('./outline.js');
-const {moveBranch,moveBranchTo,indentBranch,insertTask,removePreservingChildren,visibleTasks,normalizeCompletion,toggleCompletion}=await import(outlineURL);
+const {moveBranch,moveBranchTo,indentBranch,insertTask,removePreservingChildren,visibleTasks,normalizeCompletion,toggleCompletion,subtaskProgress}=await import(outlineURL);
 const {restoreDeleted,deletionRecord}=await import('data:text/javascript;base64,'+Buffer.from(readFileSync(new URL('./undo.js',import.meta.url),'utf8').replace("'./outline.js'",JSON.stringify(outlineURL))).toString('base64'));
 const {parsePaste}=await import(moduleURL('./paste.js'));
 const {toMarkdown}=await import(moduleURL('./markdown.js'));
@@ -19,7 +19,7 @@ const completed=toggleCompletion(tasks,'parent');
 assert.deepEqual(completed.map(t=>t.done),[true,true,true,true,false],'Parent checks every descendant without affecting other roots');
 assert.deepEqual(toggleCompletion(completed,'parent').map(t=>t.done),tasks.map(t=>t.done),'Unchecking a parent clears its entire branch');
 assert.deepEqual(toggleCompletion(completed,'grandchild').map(t=>t.done),[false,false,false,true,false],'Unchecking a grandchild clears all ancestors and preserves siblings');
-assert.deepEqual(toggleCompletion(toggleCompletion(tasks,'grandchild'),'b').map(t=>t.done),[true,true,true,true,false],'Completing the last child automatically completes ancestors');
+assert.deepEqual(toggleCompletion(toggleCompletion(tasks,'grandchild'),'b').map(t=>t.done),[false,false,true,true,false],'Completing the last child keeps ancestors open');
 assert.deepEqual(normalizeCompletion(insertTask(completed,'a',true,task('new'))).slice(0,4).map(t=>t.done),[false,false,false,true],'An incomplete child reopens completed parents');
 const hidden=tasks.map(t=>t.id==='parent'?{...t,collapsed:true}:t);
 assert.ok(toggleCompletion(hidden,'parent').slice(0,4).every(t=>t.done),'Hidden children are included');
@@ -27,7 +27,7 @@ const inconsistent=tasks.map(t=>t.id==='parent'?{...t,done:true}:t);
 assert.equal(normalizeCompletion(inconsistent)[0].done,false,'Saved inconsistent parents are repaired');
 assert.equal(normalizeCompletion(completed),completed,'Valid completion state is preserved without copying');
 const partial=toggleCompletion(tasks,'a');
-assert.equal(normalizeCompletion(removePreservingChildren(partial,['b']))[0].done,true,'Deleting the last incomplete child completes its parent');
+assert.equal(normalizeCompletion(removePreservingChildren(partial,['b']))[0].done,false,'Deleting the last incomplete child keeps its parent open');
 const removedChild=deletionRecord(partial,'b');
 const afterRemoval=normalizeCompletion(removePreservingChildren(partial,['b']));
 assert.equal(normalizeCompletion(restoreDeleted(afterRemoval,removedChild))[0].done,false,'Undoing deletion of an incomplete child reopens its parent');
@@ -59,8 +59,17 @@ const moved=moveBranchTo(tasks,id,target,position);validate(moved);assert.equal(
 }
 for(const id of tasks.map(t=>t.id))for(const direction of [-1,1]){let moved=tasks;for(let i=0;i<30;i++){moved=moveBranch(moved,id,direction);validate(moved);assert.equal(new Set(moved.map(t=>t.id)).size,tasks.length)}}
 const deep=Array.from({length:30},(_,i)=>task('n'+i,i));
-assert.ok(toggleCompletion(deep,'n29').every(t=>t.done),'Completion propagates across arbitrary nesting depth');
-assert.deepEqual(normalizeCompletion(indentBranch([task('p'),{...task('finished'),done:true}], 'finished',1)).map(t=>t.done),[true,true],'Reparenting recomputes completion');
+assert.deepEqual(toggleCompletion(deep,'n29').map(t=>t.done),deep.map((_,i)=>i===29),'Completing a deep leaf keeps every ancestor open');
+assert.ok(toggleCompletion(deep,'n0').every(t=>t.done),'Explicit parent completion reaches arbitrary depth');
+assert.ok(toggleCompletion(toggleCompletion(deep,'n0'),'n29').every(t=>!t.done),'Reopening a deep leaf reopens every ancestor');
+const onlyChild=[task('p'),task('c',1)];
+const childDone=toggleCompletion(onlyChild,'c');
+assert.deepEqual(visibleTasks(childDone,false).map(t=>t.id),['p'],'Hiding a completed only child keeps its parent visible');
+assert.equal(normalizeCompletion(childDone),childDone,'Loading an open parent with finished children preserves explicit state');
+assert.deepEqual(subtaskProgress(childDone).get('p'),{completed:1,total:1},'Progress includes hidden completed children');
+assert.deepEqual(subtaskProgress(completed).get('parent'),{completed:2,total:2},'Progress counts direct children, not grandchildren');
+assert.equal(subtaskProgress(onlyChild).has('c'),false,'Leaves have no progress badge');
+assert.deepEqual(normalizeCompletion(indentBranch([task('p'),{...task('finished'),done:true}], 'finished',1)).map(t=>t.done),[false,true],'Moving a completed note under an open parent keeps the parent open');
 const inserted=insertTask(deep,'n29',true,task('new'));
 assert.equal(inserted.at(-1).depth,30);
 const siblings=[...deep,task('sibling',29)];

@@ -1,13 +1,21 @@
 export const depth=t=>t.depth||0;
-// Parent completion is derived from its children, including collapsed branches.
+// Completion is explicit; unfinished descendants can only reopen ancestors.
 export function normalizeCompletion(tasks){
 let result=tasks;const stack=[];
 for(let i=tasks.length-1;i>=0;i--){
-const level=depth(tasks[i]);let hasChildren=false,done=true;
-while(stack.length&&stack.at(-1).level>level){hasChildren=true;done=stack.pop().done&&done}
-if(!hasChildren)done=!!tasks[i].done;
+const level=depth(tasks[i]);let done=!!tasks[i].done;
+while(stack.length&&stack.at(-1).level>level){done=stack.pop().done&&done}
 if(done!==tasks[i].done){if(result===tasks)result=tasks.slice();result[i]={...tasks[i],done}}
 stack.push({level,done});
+}
+return result;
+}
+export function subtaskProgress(tasks){
+const result=new Map(),stack=[];
+for(const task of tasks){
+while(stack.length&&depth(stack.at(-1))>=depth(task))stack.pop();
+if(stack.length){const id=stack.at(-1).id,progress=result.get(id)||{completed:0,total:0};progress.total++;if(task.done)progress.completed++;result.set(id,progress)}
+stack.push(task);
 }
 return result;
 }
