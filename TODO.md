@@ -22,6 +22,11 @@
 
 ## Implemented
 
+- [x] Shift+Up/Down and Shift+click select visible note ranges. Alt+Up/Down, the selection toolbar, and experimental group dragging move selected branches together, carrying descendants once. Group moves use one undo entry; Escape clears selection. View-only blocks movement and allows selection/copy.
+- [x] Breadcrumbs stay sticky directly beneath the measured header, including responsive wrapping and when the header is hidden. Deep paths scroll horizontally and bring the current list into view.
+- [x] Copy Markdown and its fallback include the current sublist title as a heading; Home copies contain only notes. Full-list copy includes folded and hidden completed notes. Copying a selection includes each selected branch once.
+- [x] Show completed is a persistent toggle, enabled by default, available in the list and action search. Alt+Shift+H toggles it and is documented in shortcuts. Completed counts include folded descendants in both states; fully hidden lists offer a Show completed recovery button. Keyboard movement skips hidden completed notes.
+
 - [x] Header Experimental dropdown lists feature names with toggles. Every experiment defaults off; explicit choices are remembered locally. Dragging notes is the first experiment, with handles hidden and pointer reordering disabled until enabled. View-only still prevents dragging.
 - [x] With experimental dragging enabled, use dedicated handles to reorder, nest under another note, or move into a breadcrumb list. Descendants stay attached, self/descendant drops are blocked, edge scrolling is supported, and Escape cancels before any change.
 - [x] Between-note plus opens New note and Child note choices, replacing the trailing child-add icon. Only the plus is clickable; touch devices always show it.

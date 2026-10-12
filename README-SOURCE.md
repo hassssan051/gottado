@@ -24,6 +24,10 @@ Experimental features are opt-in through the header dropdown and start switched 
 
 The plus between notes offers New note and Child note. Enter adds a sibling while editing; Ctrl/⌘+Enter adds a child. Press Backspace twice within 800 ms on an empty note to remove it without confirmation, preserving its children. Copy Markdown exports plain nested bullets without completion brackets.
 
+Shift+Up/Down selects note ranges; Shift+click extends from the focused note or selection anchor. Alt+Up/Down or the selection toolbar moves them together; experimental dragging also moves the selection. Parents carry descendants once, and selected branches become siblings at their destination. Each group move is one undo action. Escape clears selection. Shift+Left/Right and mouse text selection retain ordinary text selection. Ctrl/⌘+C copies selected branches when no text is selected. View-only permits selection and copying but blocks moving.
+
+Breadcrumbs stay below the sticky header and scroll horizontally for deep nesting. The Show completed switch defaults on and is saved locally; Alt+Shift+H and action search toggle it. The completed count includes folded descendants, whether shown or hidden. Hiding completed notes does not delete them, and keyboard movement skips them. Copy Markdown includes all notes in the current list, including folded and hidden completed notes, with the sublist title as a heading. Home copies have no heading.
+
 Ctrl/⌘+Z inside a textbox always uses native text undo. Outside textboxes it reverses the last five app actions, newest first, including adding/pasting notes, completion, moving, nesting, deletion (including bulk deletion), folding, list navigation, and settings. Find notes and actions also offers Undo latest app action. Undo preserves later text edits to surviving notes. Older actions are discarded, empty history shows the limit, and app history resets when the page reloads.
 
 ## Included code

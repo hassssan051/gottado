@@ -87,3 +87,4 @@ assert.equal(searchCommands([{id:'action',label:'Add child to selected task',gro
 console.log('Outline checks passed: movement across sublists, descendants, unlimited nesting, undo, paste, export, visibility, and note search.');
 await import('./drag.test.mjs');
 await import('./action-history.test.mjs');
+await import('./selection.test.mjs');

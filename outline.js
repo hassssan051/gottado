@@ -39,9 +39,46 @@ const i=tasks.findIndex(t=>t.id===id);if(i<0)return tasks;
 const at=child?i+1:endOfBranch(tasks,i);
 return [...tasks.slice(0,at),{...newTask,depth:depth(tasks[i])+(child?1:0)},...tasks.slice(at)];
 }
-export function visibleTasks(tasks){
+export function visibleTasks(tasks,showCompleted=true){
 let hiddenBelow=null;
-return tasks.filter(t=>{if(hiddenBelow!==null&&depth(t)>hiddenBelow)return false;hiddenBelow=null;if(t.collapsed)hiddenBelow=depth(t);return true});
+return tasks.filter(t=>{if(hiddenBelow!==null&&depth(t)>hiddenBelow)return false;hiddenBelow=null;if(t.collapsed||(!showCompleted&&t.done))hiddenBelow=depth(t);return showCompleted||!t.done});
+}
+
+export function selectionRange(visible,anchor,head){
+const a=visible.findIndex(t=>t.id===anchor),b=visible.findIndex(t=>t.id===head);
+return b<0?[]:a<0?[head]:visible.slice(Math.min(a,b),Math.max(a,b)+1).map(t=>t.id);
+}
+export function selectedBranches(tasks,ids){
+const selected=new Set(ids),branches=[];
+for(let i=0;i<tasks.length;i++){if(!selected.has(tasks[i].id))continue;const end=endOfBranch(tasks,i);branches.push({index:i,end,task:tasks[i]});i=end-1}
+return branches;
+}
+function repositionBranches(tasks,branches,at,level){
+const moved=new Set(),content=[];
+for(const branch of branches){const delta=level-depth(branch.task);for(let i=branch.index;i<branch.end;i++){moved.add(i);content.push(delta?{...tasks[i],depth:depth(tasks[i])+delta}:tasks[i])}}
+const remaining=tasks.filter((_,i)=>!moved.has(i));
+const insertion=tasks.slice(0,at).filter((_,i)=>!moved.has(i)).length;
+const result=[...remaining.slice(0,insertion),...content,...remaining.slice(insertion)];
+return result.every((t,i)=>t.id===tasks[i].id&&depth(t)===depth(tasks[i]))?tasks:result;
+}
+export function moveBranchesTo(tasks,ids,targetId,position){
+const branches=selectedBranches(tasks,ids);if(!branches.length)return tasks;
+if(branches.length===1)return moveBranchTo(tasks,branches[0].task.id,targetId,position);
+const target=tasks.findIndex(t=>t.id===targetId);
+if(!['before','after','child','list'].includes(position)||branches.some(b=>target>=b.index&&target<b.end))return tasks;
+if(target<0&&(position!=='list'||targetId!==null))return tasks;
+const at=target<0?tasks.length:position==='before'?target:endOfBranch(tasks,target);
+const level=target<0?0:depth(tasks[target])+(['child','list'].includes(position)?1:0);
+return repositionBranches(tasks,branches,at,level);
+}
+export function moveBranches(tasks,ids,direction,showCompleted=true){
+const branches=selectedBranches(tasks,ids);if(!branches.length)return tasks;
+if(branches.length===1&&showCompleted)return moveBranch(tasks,branches[0].task.id,direction);
+const first=branches[0].index,end=branches.at(-1).end,level=Math.min(...branches.map(b=>depth(b.task)));
+if(direction<0){let previous=first-1;while(previous>=0&&!showCompleted&&tasks[previous].done)previous--;if(previous<0)return tasks;return repositionBranches(tasks,branches,previous,depth(tasks[previous]))}
+let following=end;while(following<tasks.length&&!showCompleted&&tasks[following].done)following++;
+if(following===tasks.length||depth(tasks[following])<level){if(!level)return tasks;return repositionBranches(tasks,branches,following,level-1)}
+return repositionBranches(tasks,branches,following+1,depth(tasks[following])+(endOfBranch(tasks,following)>following+1?1:0));
 }
 export function parentIndex(tasks,index){const level=depth(tasks[index]);for(let i=index-1;i>=0;i--)if(depth(tasks[i])<level)return i;return -1}
 export function revealTask(tasks,id){
