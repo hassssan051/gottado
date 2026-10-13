@@ -30,7 +30,7 @@ Breadcrumbs stay below the sticky header and scroll horizontally for deep nestin
 
 Ctrl/⌘+Z inside a textbox always uses native text undo. Outside textboxes it reverses the last five app actions, newest first, including adding/pasting notes, completion, moving, nesting, deletion (including bulk deletion), folding, list navigation, and settings. Find notes and actions also offers Undo latest app action. Undo preserves later text edits to surviving notes. Older actions are discarded, empty history shows the limit, and app history resets when the page reloads.
 
-Ctrl/⌘+Space toggles the focused note's completion. Completing a parent completes its whole branch; reopening a child reopens its ancestors. Finishing all subtasks keeps the parent open until you explicitly complete it. Parent rows show completed direct-subtask progress, including hidden children.
+Ctrl/⌘+Space toggles the focused note's completion. Completing a parent completes its whole branch; reopening a child reopens its ancestors. Finishing all subtasks keeps the parent open until you explicitly complete it. Parent rows show a compact checkmark and completed/total subtask badge, including hidden children; hover for the full explanation.
 
 ## Included code
 
